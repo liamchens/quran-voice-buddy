@@ -35,10 +35,10 @@ const RecitePage = () => {
     error: speechError,
   } = useSpeechRecognition();
 
-  // Build all words from all ayahs
+  // Build all words from all ayahs with ayah end markers
   const allWordsFlat = useMemo(() => {
     if (!surah) return [];
-    const words: { word: string; normalized: string; ayahIndex: number; wordIndex: number }[] = [];
+    const words: { word: string; normalized: string; ayahIndex: number; wordIndex: number; isLastWord: boolean }[] = [];
     
     surah.ayahs.forEach((ayah, ayahIdx) => {
       const ayahWords = ayah.text.split(' ').filter(w => w.length > 0);
@@ -51,6 +51,7 @@ const RecitePage = () => {
           normalized: normalizedWords[wordIdx] || '',
           ayahIndex: ayahIdx,
           wordIndex: wordIdx,
+          isLastWord: wordIdx === ayahWords.length - 1,
         });
       });
     });
@@ -59,17 +60,21 @@ const RecitePage = () => {
   }, [surah]);
 
   // Real-time matching - sequential with skip detection
-  const wordStatuses = useMemo((): WordStatus[] => {
+  const wordStatuses = useMemo(() => {
     if (!surah || allWordsFlat.length === 0) return [];
     
     const fullTranscript = (transcript + ' ' + interimTranscript).trim();
     const normalizedUser = normalizeArabic(fullTranscript);
     const userWords = normalizedUser.split(' ').filter(w => w.length > 0);
     
+    type ExtendedWordStatus = WordStatus & { isLastWord: boolean; ayahNumber: number };
+    
     // Initialize all words as pending
-    const statuses: WordStatus[] = allWordsFlat.map(w => ({
+    const statuses: ExtendedWordStatus[] = allWordsFlat.map(w => ({
       word: w.word,
       status: 'pending' as const,
+      isLastWord: w.isLastWord,
+      ayahNumber: w.ayahIndex + 1,
     }));
     
     if (userWords.length === 0) return statuses;
@@ -83,7 +88,12 @@ const RecitePage = () => {
       
       // Exact match - correct
       if (userWord === refWord.normalized) {
-        statuses[refIndex] = { word: refWord.word, status: 'correct' };
+        statuses[refIndex] = { 
+          word: refWord.word, 
+          status: 'correct',
+          isLastWord: refWord.isLastWord,
+          ayahNumber: refWord.ayahIndex + 1,
+        };
         refIndex++;
         userIndex++;
         continue;
@@ -105,10 +115,17 @@ const RecitePage = () => {
             word: allWordsFlat[skip].word,
             status: 'skipped',
             errorReason: 'Ayat terlewat',
+            isLastWord: allWordsFlat[skip].isLastWord,
+            ayahNumber: allWordsFlat[skip].ayahIndex + 1,
           };
         }
         // Mark found word as correct
-        statuses[foundAhead] = { word: allWordsFlat[foundAhead].word, status: 'correct' };
+        statuses[foundAhead] = { 
+          word: allWordsFlat[foundAhead].word, 
+          status: 'correct',
+          isLastWord: allWordsFlat[foundAhead].isLastWord,
+          ayahNumber: allWordsFlat[foundAhead].ayahIndex + 1,
+        };
         refIndex = foundAhead + 1;
         userIndex++;
       } else {
@@ -117,6 +134,8 @@ const RecitePage = () => {
           word: refWord.word,
           status: 'incorrect',
           errorReason: 'Pengucapan salah',
+          isLastWord: refWord.isLastWord,
+          ayahNumber: refWord.ayahIndex + 1,
         };
         refIndex++;
         userIndex++;
@@ -238,7 +257,7 @@ const RecitePage = () => {
           {/* All Words - Horizontal Mushaf Style */}
           <div dir="rtl">
             {spokenWordsCount > 0 ? (
-              <p className="font-arabic text-2xl md:text-3xl leading-[2.5] text-right">
+              <p className="font-arabic text-2xl md:text-3xl leading-[2.8] text-right">
                 {wordStatuses.map((wordStatus, idx) => {
                   if (wordStatus.status === 'pending') return null;
                   
@@ -248,10 +267,10 @@ const RecitePage = () => {
                     <span key={idx} className="relative group inline">
                       <span
                         className={cn(
-                          'px-1 rounded-md transition-all duration-200',
-                          wordStatus.status === 'correct' && 'text-success bg-success/10',
-                          wordStatus.status === 'incorrect' && 'text-destructive bg-destructive/10',
-                          wordStatus.status === 'skipped' && 'text-amber-600 bg-amber-500/10'
+                          'px-0.5 rounded transition-all duration-200',
+                          wordStatus.status === 'correct' && 'text-success',
+                          wordStatus.status === 'incorrect' && 'text-destructive',
+                          wordStatus.status === 'skipped' && 'text-amber-600'
                         )}
                       >
                         {wordStatus.word}
@@ -262,7 +281,13 @@ const RecitePage = () => {
                           {wordStatus.errorReason}
                         </span>
                       )}
-                      <span className="inline"> </span>
+                      {/* Ayah end marker */}
+                      {wordStatus.isLastWord && (
+                        <span className="inline-flex items-center justify-center w-6 h-6 mx-1 text-xs rounded-full border border-primary/30 text-primary font-sans">
+                          {wordStatus.ayahNumber}
+                        </span>
+                      )}
+                      {!wordStatus.isLastWord && <span className="inline"> </span>}
                     </span>
                   );
                 })}
