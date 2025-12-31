@@ -60,31 +60,15 @@ export function Header({ title, subtitle, showBack = false, minimalMode = false 
 
   const InfoContent = () => (
     <div className="space-y-5 text-center">
-      <div className="space-y-3">
-        <p className="text-base text-foreground leading-relaxed">
-          <strong>Hafalin</strong> adalah aplikasi bantu hafalan Al-Qur'an yang menggunakan teknologi pengenalan suara otomatis. 
-          Cukup baca ayat yang ingin kamu hafal, dan aplikasi akan memvalidasi bacaanmu secara real-time.
-        </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Dirancang untuk membantu para penghafal Al-Qur'an berlatih secara mandiri kapan saja dan di mana saja. 
-          Dengan tampilan yang sederhana dan mudah digunakan, Hafalin cocok untuk pemula maupun yang sudah berpengalaman.
-        </p>
-      </div>
-
-      <div className="bg-primary/10 border border-primary/20 rounded-xl p-4">
-        <h4 className="font-semibold text-foreground mb-2">✨ Fitur Utama</h4>
-        <ul className="text-sm text-muted-foreground space-y-1 text-left">
-          <li>• Validasi bacaan otomatis dengan suara</li>
-          <li>• Daftar lengkap 114 surah Al-Qur'an</li>
-          <li>• Tampilan teks Arab yang jelas dan mudah dibaca</li>
-          <li>• Mode gelap untuk kenyamanan mata</li>
-          <li>• Gratis dan tanpa iklan</li>
-        </ul>
-      </div>
+      <p className="text-base text-foreground leading-relaxed">
+        <strong>Hafalin</strong> adalah website bantu hafalan Al-Qur'an dengan teknologi pengenalan suara. 
+        Tinggal baca ayat yang mau dihafal, dan bacaanmu akan dicek langsung. 
+        Praktis, simpel, dan bikin proses menghafal jadi lebih nyaman dimana saja kapan saja.
+      </p>
 
       <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
         <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">
-          ⚠️ Penting: Aplikasi ini hanya alat bantu hafalan, bukan penentu hukum tajwid. 
+          ⚠️ Penting: Website ini hanya alat bantu hafalan, bukan penentu hukum tajwid. 
           Tetap belajar dengan guru yang berkompeten untuk hasil terbaik.
         </p>
       </div>
