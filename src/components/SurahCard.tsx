@@ -1,3 +1,4 @@
+import { MapPin, BookOpen } from 'lucide-react';
 import { Surah } from '@/lib/quran-api';
 
 interface SurahCardProps {
@@ -6,36 +7,50 @@ interface SurahCardProps {
 }
 
 export function SurahCard({ surah, onClick }: SurahCardProps) {
+  const revelationPlace = surah.revelationType === 'Meccan' ? 'Mekah' : 'Madinah';
+  
   return (
     <button
       onClick={onClick}
       className="card-islamic w-full p-4 rounded-xl flex items-center gap-4 group"
     >
       {/* Surah Number - Islamic Star */}
-      <div className="relative w-12 h-12 flex items-center justify-center flex-shrink-0">
+      <div className="relative w-11 h-11 flex items-center justify-center flex-shrink-0">
         <img 
           src="https://2zojb93ygj.ucarcdn.net/bdb1428f-4e8d-4bed-b031-5f99d5f3f8a2/bintang.png"
           alt=""
           className="absolute inset-0 w-full h-full object-contain"
         />
-        <span className="relative z-10 text-base font-semibold text-primary">
+        <span className="relative z-10 text-sm font-semibold text-primary">
           {surah.number}
         </span>
       </div>
       
-      {/* Spacer */}
-      <div className="flex-1" />
+      {/* Surah Info - Middle */}
+      <div className="flex-1 text-left min-w-0">
+        <h3 className="text-base font-semibold text-foreground truncate">
+          {surah.englishName}
+        </h3>
+        <p className="text-sm text-muted-foreground truncate">
+          {surah.englishNameTranslation}
+        </p>
+        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <MapPin className="w-3 h-3" />
+            {revelationPlace}
+          </span>
+          <span className="flex items-center gap-1">
+            <BookOpen className="w-3 h-3" />
+            {surah.numberOfAyahs}
+          </span>
+        </div>
+      </div>
       
-      {/* Surah Info - Right side */}
-      <div className="text-right min-w-0">
-        <h3 className="font-arabic text-xl font-bold text-foreground truncate">
+      {/* Arabic Name - Right */}
+      <div className="text-right flex-shrink-0">
+        <h3 className="font-arabic text-2xl font-bold text-primary">
           {surah.name}
         </h3>
-        <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <span>{surah.numberOfAyahs} ayat</span>
-          <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-          <span>{surah.englishName}</span>
-        </div>
       </div>
     </button>
   );
