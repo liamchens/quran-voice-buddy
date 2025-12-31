@@ -11,7 +11,7 @@ export function VoiceIndicator({ isListening, onClick }: VoiceIndicatorProps) {
     <button
       onClick={onClick}
       className={cn(
-        'relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300',
+        'relative w-16 h-16 md:w-24 md:h-24 rounded-full flex items-center justify-center transition-all duration-300',
         isListening
           ? 'btn-islamic listening-indicator'
           : 'bg-secondary hover:bg-secondary/80'
@@ -27,9 +27,9 @@ export function VoiceIndicator({ isListening, onClick }: VoiceIndicatorProps) {
       
       {/* Icon */}
       {isListening ? (
-        <Mic className="w-10 h-10 text-primary-foreground relative z-10" />
+        <Mic className="w-7 h-7 md:w-10 md:h-10 text-primary-foreground relative z-10" />
       ) : (
-        <MicOff className="w-10 h-10 text-muted-foreground" />
+        <MicOff className="w-7 h-7 md:w-10 md:h-10 text-muted-foreground" />
       )}
     </button>
   );

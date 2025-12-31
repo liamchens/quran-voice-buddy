@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 interface WordStatus {
   word: string;
-  status: 'pending' | 'correct' | 'incorrect' | 'skipped';
+  status: 'pending' | 'correct' | 'skipped';
   errorReason?: string;
 }
 
@@ -59,7 +59,7 @@ const RecitePage = () => {
     return words;
   }, [surah]);
 
-  // Real-time matching - sequential with skip detection
+  // Real-time matching - only mark skipped ayahs as error
   const wordStatuses = useMemo(() => {
     if (!surah || allWordsFlat.length === 0) return [];
     
@@ -109,7 +109,7 @@ const RecitePage = () => {
       }
       
       if (foundAhead !== -1) {
-        // Mark all skipped words as skipped
+        // Mark all skipped words as skipped (ayat terlewat)
         for (let skip = refIndex; skip < foundAhead; skip++) {
           statuses[skip] = {
             word: allWordsFlat[skip].word,
@@ -129,11 +129,10 @@ const RecitePage = () => {
         refIndex = foundAhead + 1;
         userIndex++;
       } else {
-        // No match found - incorrect pronunciation
+        // No exact match - still mark as correct (tolerance for pronunciation variations)
         statuses[refIndex] = {
           word: refWord.word,
-          status: 'incorrect',
-          errorReason: 'Pengucapan salah',
+          status: 'correct',
           isLastWord: refWord.isLastWord,
           ayahNumber: refWord.ayahIndex + 1,
         };
@@ -144,6 +143,23 @@ const RecitePage = () => {
     
     return statuses;
   }, [surah, transcript, interimTranscript, allWordsFlat]);
+
+  // Check how many words have been spoken
+  const spokenWordsCount = useMemo(() => {
+    return wordStatuses.filter(w => w.status !== 'pending').length;
+  }, [wordStatuses]);
+
+  // Check if all words are complete
+  const allComplete = useMemo(() => {
+    return wordStatuses.length > 0 && wordStatuses.every(s => s.status !== 'pending');
+  }, [wordStatuses]);
+
+  // Auto-stop when complete
+  useEffect(() => {
+    if (allComplete && isListening) {
+      stopListening();
+    }
+  }, [allComplete, isListening, stopListening]);
 
   // Load surah data
   useEffect(() => {
@@ -177,16 +193,6 @@ const RecitePage = () => {
   const handleRetry = useCallback(() => {
     resetTranscript();
   }, [resetTranscript]);
-
-  // Check how many words have been spoken
-  const spokenWordsCount = useMemo(() => {
-    return wordStatuses.filter(w => w.status !== 'pending').length;
-  }, [wordStatuses]);
-
-  // Check if all words are complete
-  const allComplete = useMemo(() => {
-    return wordStatuses.length > 0 && wordStatuses.every(s => s.status !== 'pending');
-  }, [wordStatuses]);
 
   if (isLoading) {
     return (
@@ -239,9 +245,9 @@ const RecitePage = () => {
     <div className="min-h-screen bg-background">
       <Header title={surah.name} subtitle={surah.englishName} showBack />
 
-      <main className="container py-6 pb-40">
+      <main className="container py-6 pb-48 md:pb-40">
         {/* Ayah Display - Tarteel Style */}
-        <div className="bg-card rounded-2xl border border-border p-6 mb-6 fade-in">
+        <div className="bg-card rounded-2xl border border-border p-4 md:p-6 mb-6 fade-in">
           {/* Surah Title */}
           <div className="text-center mb-6 pb-4 border-b border-border">
             <p className="font-arabic text-xl text-primary">{surah.name}</p>
@@ -261,7 +267,7 @@ const RecitePage = () => {
                 {wordStatuses.map((wordStatus, idx) => {
                   if (wordStatus.status === 'pending') return null;
                   
-                  const isError = wordStatus.status === 'incorrect' || wordStatus.status === 'skipped';
+                  const isSkipped = wordStatus.status === 'skipped';
                   
                   return (
                     <span key={idx} className="relative group inline">
@@ -269,14 +275,13 @@ const RecitePage = () => {
                         className={cn(
                           'px-0.5 rounded transition-all duration-200',
                           wordStatus.status === 'correct' && 'text-success',
-                          wordStatus.status === 'incorrect' && 'text-destructive',
-                          wordStatus.status === 'skipped' && 'text-amber-600'
+                          isSkipped && 'text-destructive'
                         )}
                       >
                         {wordStatus.word}
                       </span>
-                      {/* Error tooltip */}
-                      {isError && wordStatus.errorReason && (
+                      {/* Error tooltip for skipped */}
+                      {isSkipped && wordStatus.errorReason && (
                         <span className="absolute -top-8 right-0 z-10 hidden group-hover:block bg-destructive text-destructive-foreground text-xs px-2 py-1 rounded whitespace-nowrap font-sans">
                           {wordStatus.errorReason}
                         </span>
@@ -307,7 +312,7 @@ const RecitePage = () => {
         </div>
 
         {/* Retry button */}
-        {spokenWordsCount > 0 && (
+        {spokenWordsCount > 0 && !allComplete && (
           <div className="flex justify-center mb-6">
             <Button
               variant="outline"
@@ -328,22 +333,33 @@ const RecitePage = () => {
           </div>
         )}
 
-        {/* Completion Message */}
-        {allComplete && (
-          <div className="text-center p-8 rounded-2xl bg-success/10 border border-success/20 slide-up">
+        {/* Completion/Appreciation Message */}
+        {!isListening && spokenWordsCount > 0 && (
+          <div className="text-center p-6 md:p-8 rounded-2xl bg-success/10 border border-success/20 slide-up">
             <p className="text-2xl mb-2">🎉</p>
-            <h3 className="text-xl font-bold text-success mb-2">
-              MasyaAllah, Selesai!
+            <h3 className="text-lg md:text-xl font-bold text-success mb-2">
+              {allComplete ? 'MasyaAllah, Luar Biasa!' : 'Alhamdulillah, Bagus Sekali!'}
             </h3>
-            <p className="text-muted-foreground">
-              Anda telah menyelesaikan hafalan Surah {surah.englishName}
+            <p className="text-muted-foreground text-sm md:text-base">
+              {allComplete 
+                ? `Anda telah menyelesaikan hafalan Surah ${surah.englishName}` 
+                : `Anda sudah menghafal ${spokenWordsCount} kata dari Surah ${surah.englishName}. Terus semangat!`}
             </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetry}
+              className="gap-2 mt-4"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Ulangi dari Awal
+            </Button>
           </div>
         )}
       </main>
 
-      {/* Fixed Bottom Voice Control */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border py-4">
+      {/* Fixed Bottom Voice Control - Responsive */}
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border py-3 md:py-4">
         <div className="container flex flex-col items-center gap-2">
           <VoiceIndicator isListening={isListening} onClick={handleVoiceToggle} />
           <p className="text-xs text-muted-foreground">
