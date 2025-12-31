@@ -121,9 +121,9 @@ const RecitePage = () => {
         continue;
       }
       
-      // Look ahead to detect skipped words (user jumped ahead)
+      // Look ahead to detect skipped words (user jumped ahead) - search entire remaining surah
       let foundAhead = -1;
-      for (let lookAhead = refIndex + 1; lookAhead < Math.min(refIndex + 10, allWordsFlat.length); lookAhead++) {
+      for (let lookAhead = refIndex + 1; lookAhead < allWordsFlat.length; lookAhead++) {
         if (userWord === allWordsFlat[lookAhead].normalized) {
           foundAhead = lookAhead;
           break;
@@ -151,7 +151,8 @@ const RecitePage = () => {
         refIndex = foundAhead + 1;
         userIndex++;
       } else {
-        // No exact match - still mark as correct (tolerance for pronunciation variations)
+        // No exact match found anywhere - tolerance for pronunciation variations
+        // Mark current reference word as correct and move on
         statuses[refIndex] = {
           word: refWord.word,
           status: 'correct',
