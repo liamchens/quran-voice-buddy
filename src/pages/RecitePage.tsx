@@ -18,6 +18,28 @@ interface WordStatus {
   errorReason?: string;
 }
 
+// Random appreciation messages
+const PARTIAL_APPRECIATIONS = [
+  { title: 'Alhamdulillah, Bagus!', emoji: '👏' },
+  { title: 'Tetap Semangat!', emoji: '💪' },
+  { title: 'Barakallahu Fiik!', emoji: '🌟' },
+  { title: 'MasyaAllah, Teruskan!', emoji: '✨' },
+  { title: 'Semangat Terus!', emoji: '🔥' },
+];
+
+const COMPLETE_APPRECIATIONS = [
+  { title: 'MasyaAllah, Luar Biasa!', emoji: '🎉' },
+  { title: 'Alhamdulillah, Sempurna!', emoji: '🏆' },
+  { title: 'Barakallahu Fiik!', emoji: '⭐' },
+  { title: 'MasyaAllah Tabarakallah!', emoji: '🌙' },
+  { title: 'Hebat Sekali!', emoji: '💎' },
+];
+
+const getRandomAppreciation = (isComplete: boolean) => {
+  const list = isComplete ? COMPLETE_APPRECIATIONS : PARTIAL_APPRECIATIONS;
+  return list[Math.floor(Math.random() * list.length)];
+};
+
 const RecitePage = () => {
   const { surahNumber } = useParams<{ surahNumber: string }>();
   const [surah, setSurah] = useState<SurahDetail | null>(null);
@@ -275,14 +297,14 @@ const RecitePage = () => {
                         className={cn(
                           'px-0.5 rounded transition-all duration-200',
                           wordStatus.status === 'correct' && 'text-success',
-                          isSkipped && 'text-destructive'
+                          isSkipped && 'text-amber-500'
                         )}
                       >
                         {wordStatus.word}
                       </span>
                       {/* Error tooltip for skipped */}
                       {isSkipped && wordStatus.errorReason && (
-                        <span className="absolute -top-8 right-0 z-10 hidden group-hover:block bg-destructive text-destructive-foreground text-xs px-2 py-1 rounded whitespace-nowrap font-sans">
+                        <span className="absolute -top-8 right-0 z-10 hidden group-hover:block bg-amber-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap font-sans">
                           {wordStatus.errorReason}
                         </span>
                       )}
@@ -334,28 +356,32 @@ const RecitePage = () => {
         )}
 
         {/* Completion/Appreciation Message */}
-        {!isListening && spokenWordsCount > 0 && (
-          <div className="text-center p-6 md:p-8 rounded-2xl bg-success/10 border border-success/20 slide-up">
-            <p className="text-2xl mb-2">🎉</p>
-            <h3 className="text-lg md:text-xl font-bold text-success mb-2">
-              {allComplete ? 'MasyaAllah, Luar Biasa!' : 'Alhamdulillah, Bagus Sekali!'}
-            </h3>
-            <p className="text-muted-foreground text-sm md:text-base">
-              {allComplete 
-                ? `Anda telah menyelesaikan hafalan Surah ${surah.englishName}` 
-                : `Anda sudah menghafal ${spokenWordsCount} kata dari Surah ${surah.englishName}. Terus semangat!`}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRetry}
-              className="gap-2 mt-4"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Ulangi dari Awal
-            </Button>
-          </div>
-        )}
+        {!isListening && spokenWordsCount > 0 && (() => {
+          const appreciation = getRandomAppreciation(allComplete);
+          const progressPercent = Math.round((spokenWordsCount / wordStatuses.length) * 100);
+          return (
+            <div className="text-center p-6 md:p-8 rounded-2xl bg-success/10 border border-success/20 slide-up">
+              <p className="text-3xl mb-2">{appreciation.emoji}</p>
+              <h3 className="text-lg md:text-xl font-bold text-success mb-2">
+                {appreciation.title}
+              </h3>
+              <p className="text-muted-foreground text-sm md:text-base">
+                {allComplete 
+                  ? `Anda telah menyelesaikan hafalan Surah ${surah.englishName}. Semoga berkah!` 
+                  : `Progres: ${progressPercent}% (${spokenWordsCount} dari ${wordStatuses.length} kata). Lanjutkan lagi kapan saja!`}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRetry}
+                className="gap-2 mt-4"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Ulangi dari Awal
+              </Button>
+            </div>
+          );
+        })()}
       </main>
 
       {/* Fixed Bottom Voice Control - Responsive */}
