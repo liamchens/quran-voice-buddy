@@ -17,8 +17,8 @@ import {
 } from '@/components/ui/dialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-const LOGO_LIGHT = 'https://raw.githubusercontent.com/langcdn/resource/main/nav/qobil_108175.png';
-const LOGO_DARK = 'https://raw.githubusercontent.com/langcdn/resource/main/nav/qobil_108175.png';
+const LOGO_LIGHT = 'https://2zojb93ygj.ucarecd.net/726bd684-244a-4f39-bb6d-5ee039317381/haflinlogohitam.png';
+const LOGO_DARK = 'https://2zojb93ygj.ucarecd.net/3413237b-725e-4812-bdf1-f110fc18ecd0/haflinlogoputih.png';
 
 interface HeaderProps {
   title?: string;
