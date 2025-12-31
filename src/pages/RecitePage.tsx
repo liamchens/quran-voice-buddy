@@ -18,25 +18,41 @@ interface WordStatus {
   errorReason?: string;
 }
 
-// Random appreciation messages
-const PARTIAL_APPRECIATIONS = [
-  { title: 'Alhamdulillah, Bagus!', emoji: '👏' },
+// Random appreciation messages based on performance
+const ENCOURAGING_MESSAGES = [
   { title: 'Tetap Semangat!', emoji: '💪' },
+  { title: 'Jangan Menyerah!', emoji: '🌱' },
+  { title: 'Terus Berlatih!', emoji: '📖' },
+  { title: 'Perbaiki Lagi Ya!', emoji: '🔄' },
+];
+
+const GOOD_MESSAGES = [
+  { title: 'Alhamdulillah, Bagus!', emoji: '👏' },
   { title: 'Barakallahu Fiik!', emoji: '🌟' },
-  { title: 'MasyaAllah, Teruskan!', emoji: '✨' },
+  { title: 'Teruskan!', emoji: '✨' },
   { title: 'Semangat Terus!', emoji: '🔥' },
 ];
 
-const COMPLETE_APPRECIATIONS = [
+const PERFECT_MESSAGES = [
   { title: 'MasyaAllah, Luar Biasa!', emoji: '🎉' },
   { title: 'Alhamdulillah, Sempurna!', emoji: '🏆' },
-  { title: 'Barakallahu Fiik!', emoji: '⭐' },
   { title: 'MasyaAllah Tabarakallah!', emoji: '🌙' },
   { title: 'Hebat Sekali!', emoji: '💎' },
+  { title: 'Hafalan Mantap!', emoji: '⭐' },
 ];
 
-const getRandomAppreciation = (isComplete: boolean) => {
-  const list = isComplete ? COMPLETE_APPRECIATIONS : PARTIAL_APPRECIATIONS;
+const getRandomAppreciation = (isComplete: boolean, hasSkipped: boolean) => {
+  let list;
+  if (hasSkipped) {
+    // Ada ayat terlewat - kasih pesan encouraging
+    list = ENCOURAGING_MESSAGES;
+  } else if (isComplete) {
+    // Selesai tanpa ada yang terlewat - kasih pujian kagum
+    list = PERFECT_MESSAGES;
+  } else {
+    // Belum selesai tapi tidak ada yang terlewat - kasih pujian bagus
+    list = GOOD_MESSAGES;
+  }
   return list[Math.floor(Math.random() * list.length)];
 };
 
@@ -358,18 +374,31 @@ const RecitePage = () => {
 
         {/* Completion/Appreciation Message */}
         {!isListening && spokenWordsCount > 0 && (() => {
-          const appreciation = getRandomAppreciation(allComplete);
+          const hasSkipped = wordStatuses.some(w => w.status === 'skipped');
+          const appreciation = getRandomAppreciation(allComplete, hasSkipped);
           const progressPercent = Math.round((spokenWordsCount / wordStatuses.length) * 100);
+          const skippedCount = wordStatuses.filter(w => w.status === 'skipped').length;
+          
           return (
-            <div className="text-center p-6 md:p-8 rounded-2xl bg-success/10 border border-success/20 slide-up">
+            <div className={cn(
+              "text-center p-6 md:p-8 rounded-2xl slide-up",
+              hasSkipped 
+                ? "bg-amber-500/10 border border-amber-500/20" 
+                : "bg-success/10 border border-success/20"
+            )}>
               <p className="text-3xl mb-2">{appreciation.emoji}</p>
-              <h3 className="text-lg md:text-xl font-bold text-success mb-2">
+              <h3 className={cn(
+                "text-lg md:text-xl font-bold mb-2",
+                hasSkipped ? "text-amber-600" : "text-success"
+              )}>
                 {appreciation.title}
               </h3>
               <p className="text-muted-foreground text-sm md:text-base">
-                {allComplete 
-                  ? `Anda telah menyelesaikan hafalan Surah ${surah.englishName}. Semoga berkah!` 
-                  : `Progres: ${progressPercent}% (${spokenWordsCount} dari ${wordStatuses.length} kata). Lanjutkan lagi kapan saja!`}
+                {allComplete && !hasSkipped
+                  ? `Anda telah menyelesaikan hafalan Surah ${surah.englishName} dengan sempurna. Semoga berkah!` 
+                  : hasSkipped 
+                    ? `Ada ${skippedCount} kata yang terlewat. Progres: ${progressPercent}%. Coba lagi ya!`
+                    : `Progres: ${progressPercent}% (${spokenWordsCount} dari ${wordStatuses.length} kata). Lanjutkan lagi kapan saja!`}
               </p>
               <Button
                 variant="outline"
