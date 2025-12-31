@@ -1,5 +1,6 @@
 import { MapPin, BookOpen } from 'lucide-react';
 import { Surah } from '@/lib/quran-api';
+import bintangImg from '@/assets/bintang.png';
 
 interface SurahCardProps {
   surah: Surah;
@@ -20,7 +21,7 @@ export function SurahCard({ surah, onClick }: SurahCardProps) {
       {/* Surah Number - Islamic Star */}
       <div className="relative w-11 h-11 flex items-center justify-center flex-shrink-0">
         <img 
-          src="https://2zojb93ygj.ucarecdn.net/bdb1428f-4e8d-4bed-b031-5f99d5f3f8a2/bintang.png"
+          src={bintangImg}
           alt=""
           className="absolute inset-0 w-full h-full object-contain"
         />
