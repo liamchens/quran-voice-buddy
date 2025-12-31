@@ -66,14 +66,13 @@ const Index = () => {
 
         {/* Search */}
         <div className="relative mb-6 fade-in">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Cari surah..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pr-10 text-right bg-card border-border h-12 rounded-xl"
-            dir="rtl"
+            className="pl-10 bg-card border-border h-12 rounded-xl"
           />
         </div>
 
