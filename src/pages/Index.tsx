@@ -99,19 +99,19 @@ const Index = () => {
 
         {/* Surah List */}
         {!isLoading && !error && (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredSurahs.map((surah, index) => (
               <div
                 key={surah.number}
                 className="fade-in"
-                style={{ animationDelay: `${index * 30}ms` }}
+                style={{ animationDelay: `${Math.min(index, 20) * 30}ms` }}
               >
                 <SurahCard surah={surah} onClick={() => handleSurahClick(surah)} />
               </div>
             ))}
 
             {filteredSurahs.length === 0 && (
-              <div className="text-center py-12">
+              <div className="text-center py-12 col-span-full">
                 <p className="text-muted-foreground">
                   Tidak ada surah yang ditemukan untuk "{searchQuery}"
                 </p>
