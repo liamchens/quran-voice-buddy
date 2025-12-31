@@ -289,7 +289,7 @@ const RecitePage = () => {
         <div className="bg-card rounded-2xl border border-border p-4 md:p-6 mb-6 fade-in">
           {/* Surah Title */}
           <div className="text-center mb-6 pb-4 border-b border-border">
-            <p className="font-arabic text-xl text-primary">{surah.name}</p>
+            <p className="font-arabic text-2xl md:text-3xl text-primary">{surah.name}</p>
           </div>
 
           {/* Bismillah (except Al-Fatihah and At-Taubah) */}
