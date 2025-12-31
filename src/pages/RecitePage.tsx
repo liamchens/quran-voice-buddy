@@ -45,12 +45,11 @@ const RecitePage = () => {
     return currentAyah.text.split(' ').filter(w => w.length > 0);
   }, [currentAyah]);
 
-  // Real-time word matching
+  // Real-time word matching - only show words that user has spoken
   const liveWordResults = useMemo(() => {
-    if (!currentAyah || (!transcript && !interimTranscript)) return null;
+    if (!currentAyah) return [];
     
     const fullTranscript = (transcript + ' ' + interimTranscript).trim();
-    if (!fullTranscript) return null;
     
     const normalizedUser = normalizeArabic(fullTranscript);
     const userWords = normalizedUser.split(' ').filter(w => w.length > 0);
@@ -58,14 +57,12 @@ const RecitePage = () => {
     const normalizedAyah = normalizeArabic(currentAyah.text);
     const referenceWords = normalizedAyah.split(' ').filter(w => w.length > 0);
     
-    return ayahWords.map((originalWord, index) => {
+    // Only return results for words that have been spoken
+    const spokenCount = userWords.length;
+    
+    return ayahWords.slice(0, spokenCount).map((originalWord, index) => {
       const refWord = referenceWords[index] || '';
-      const userWord = userWords[index];
-      
-      if (userWord === undefined) {
-        // Not yet spoken
-        return { originalWord, status: 'pending' as const };
-      }
+      const userWord = userWords[index] || '';
       
       const isCorrect = userWord === refWord;
       return { 
@@ -204,52 +201,56 @@ const RecitePage = () => {
             </p>
           )}
 
-          {/* Ayah Text with Live Highlighting */}
-          <div className="text-center">
-            <p className="font-arabic text-2xl md:text-3xl leading-[2.5] text-right" dir="rtl">
-              {liveWordResults ? (
-                // Live highlighting while speaking
-                liveWordResults.map((result, index) => (
-                  <span
-                    key={index}
-                    className={cn(
-                      'mx-0.5 px-1 rounded transition-all duration-200',
-                      result.status === 'correct' && 'text-success bg-success/15',
-                      result.status === 'incorrect' && 'text-destructive bg-destructive/15 underline decoration-wavy',
-                      result.status === 'pending' && 'text-foreground'
-                    )}
-                  >
-                    {result.originalWord}
-                  </span>
-                ))
-              ) : validationResult ? (
-                // Final result highlighting
-                validationResult.wordResults.map((result, index) => (
-                  <span
-                    key={index}
-                    className={cn(
-                      'mx-0.5 px-1 rounded transition-all duration-200',
-                      result.isCorrect 
-                        ? 'text-success bg-success/15' 
-                        : 'text-destructive bg-destructive/15 underline decoration-wavy'
-                    )}
-                  >
-                    {result.originalExpected}
-                  </span>
-                ))
-              ) : (
-                // Plain text before speaking
-                ayahWords.map((word, index) => (
-                  <span key={index} className="mx-0.5">
-                    {word}
-                  </span>
-                ))
-              )}
-              {/* Ayah number marker */}
-              <span className="inline-flex items-center justify-center w-8 h-8 mx-2 text-sm rounded-full bg-primary/10 text-primary font-sans">
-                {currentAyahIndex + 1}
-              </span>
-            </p>
+          {/* Ayah Text - Hidden until user speaks */}
+          <div className="text-center min-h-[120px] flex items-center justify-center">
+            {liveWordResults.length > 0 || validationResult ? (
+              <p className="font-arabic text-2xl md:text-3xl leading-[2.5] text-right" dir="rtl">
+                {validationResult ? (
+                  // Final result highlighting
+                  validationResult.wordResults.map((result, index) => (
+                    <span
+                      key={index}
+                      className={cn(
+                        'mx-0.5 px-1 rounded transition-all duration-200',
+                        result.isCorrect 
+                          ? 'text-success bg-success/15' 
+                          : 'text-destructive bg-destructive/15 underline decoration-wavy'
+                      )}
+                    >
+                      {result.originalExpected}
+                    </span>
+                  ))
+                ) : (
+                  // Live highlighting while speaking - only show spoken words
+                  liveWordResults.map((result, index) => (
+                    <span
+                      key={index}
+                      className={cn(
+                        'mx-0.5 px-1 rounded transition-all duration-200',
+                        result.status === 'correct' && 'text-success bg-success/15',
+                        result.status === 'incorrect' && 'text-destructive bg-destructive/15 underline decoration-wavy'
+                      )}
+                    >
+                      {result.originalWord}
+                    </span>
+                  ))
+                )}
+                {/* Ayah number marker */}
+                <span className="inline-flex items-center justify-center w-8 h-8 mx-2 text-sm rounded-full bg-primary/10 text-primary font-sans">
+                  {currentAyahIndex + 1}
+                </span>
+              </p>
+            ) : (
+              // Empty state - waiting for user to speak
+              <div className="text-center py-8">
+                <p className="text-muted-foreground text-lg mb-2">
+                  Ayat ke-{currentAyahIndex + 1}
+                </p>
+                <p className="text-muted-foreground/60 text-sm">
+                  Silakan mulai membaca, ayat akan muncul...
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
