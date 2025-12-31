@@ -1,6 +1,6 @@
 import { MapPin, BookOpen } from 'lucide-react';
 import { Surah } from '@/lib/quran-api';
-import { getIndonesianTranslation } from '@/lib/surah-translations';
+import { getIndonesianName, getIndonesianTranslation } from '@/lib/surah-translations';
 import bintangImg from '@/assets/bintang.png';
 
 interface SurahCardProps {
@@ -14,8 +14,9 @@ export function SurahCard({ surah, onClick }: SurahCardProps) {
   // Remove "سورة" prefix from Arabic name
   const arabicName = surah.name.replace(/^سُورَةُ\s*/, '').replace(/^سورة\s*/, '');
   
-  // Get Indonesian translation
-  const indonesianName = getIndonesianTranslation(surah.number);
+  // Get Indonesian name and translation
+  const indonesianSurahName = getIndonesianName(surah.number);
+  const indonesianTranslation = getIndonesianTranslation(surah.number);
   
   return (
     <button
@@ -37,10 +38,10 @@ export function SurahCard({ surah, onClick }: SurahCardProps) {
       {/* Surah Info - Middle */}
       <div className="flex-1 text-left min-w-0">
         <h3 className="text-base font-semibold text-foreground truncate">
-          {surah.englishName}
+          {indonesianSurahName}
         </h3>
         <p className="text-sm text-muted-foreground truncate">
-          {indonesianName}
+          {indonesianTranslation}
         </p>
         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
