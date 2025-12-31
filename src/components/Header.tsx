@@ -59,29 +59,38 @@ export function Header({ title, subtitle, showBack = false, minimalMode = false 
   }, []);
 
   const InfoContent = () => (
-    <div className="space-y-4 text-center">
-      <img 
-        src={isDark ? LOGO_DARK : LOGO_LIGHT} 
-        alt="Hafalin Logo" 
-        className="w-16 h-16 mx-auto object-contain"
-      />
-      
-      <div className="space-y-2">
-        <h3 className="font-semibold text-foreground">Hafalin</h3>
-        <p className="text-sm text-muted-foreground">
-          Aplikasi bantu hafalan Al-Qur'an dengan validasi suara otomatis.
+    <div className="space-y-5 text-center">
+      <div className="space-y-3">
+        <p className="text-base text-foreground leading-relaxed">
+          <strong>Hafalin</strong> adalah aplikasi bantu hafalan Al-Qur'an yang menggunakan teknologi pengenalan suara otomatis. 
+          Cukup baca ayat yang ingin kamu hafal, dan aplikasi akan memvalidasi bacaanmu secara real-time.
         </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Dirancang untuk membantu para penghafal Al-Qur'an berlatih secara mandiri kapan saja dan di mana saja. 
+          Dengan tampilan yang sederhana dan mudah digunakan, Hafalin cocok untuk pemula maupun yang sudah berpengalaman.
+        </p>
+      </div>
+
+      <div className="bg-primary/10 border border-primary/20 rounded-xl p-4">
+        <h4 className="font-semibold text-foreground mb-2">✨ Fitur Utama</h4>
+        <ul className="text-sm text-muted-foreground space-y-1 text-left">
+          <li>• Validasi bacaan otomatis dengan suara</li>
+          <li>• Daftar lengkap 114 surah Al-Qur'an</li>
+          <li>• Tampilan teks Arab yang jelas dan mudah dibaca</li>
+          <li>• Mode gelap untuk kenyamanan mata</li>
+          <li>• Gratis dan tanpa iklan</li>
+        </ul>
       </div>
 
       <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
         <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">
           ⚠️ Penting: Aplikasi ini hanya alat bantu hafalan, bukan penentu hukum tajwid. 
-          Tetap belajar dengan guru yang berkompeten.
+          Tetap belajar dengan guru yang berkompeten untuk hasil terbaik.
         </p>
       </div>
 
-      <div className="pt-2 border-t border-border">
-        <p className="text-sm text-muted-foreground mb-2">Dibuat oleh</p>
+      <div className="pt-3 border-t border-border">
+        <p className="text-sm text-muted-foreground mb-2">Dibuat dengan ❤️ oleh</p>
         <p className="font-semibold text-foreground">akhirpetang</p>
       </div>
 
