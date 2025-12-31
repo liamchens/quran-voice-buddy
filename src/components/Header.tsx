@@ -1,4 +1,4 @@
-import { ArrowLeft, Moon, Sun, Info, BookOpen } from 'lucide-react';
+import { ArrowLeft, Moon, Sun, Info } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import {
@@ -16,7 +16,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useIsMobile } from '@/hooks/use-mobile';
-import logoImage from '@/assets/logo.png';
+
+const LOGO_LIGHT = 'https://raw.githubusercontent.com/langcdn/resource/main/nav/qobil_108175.png';
+const LOGO_DARK = 'https://raw.githubusercontent.com/langcdn/resource/main/nav/qobil_108175.png';
 
 interface HeaderProps {
   title?: string;
@@ -59,7 +61,7 @@ export function Header({ title, subtitle, showBack = false, minimalMode = false 
   const InfoContent = () => (
     <div className="space-y-4 text-center">
       <img 
-        src={logoImage} 
+        src={isDark ? LOGO_DARK : LOGO_LIGHT} 
         alt="Hafalin Logo" 
         className="w-16 h-16 mx-auto object-contain"
       />
@@ -135,9 +137,9 @@ export function Header({ title, subtitle, showBack = false, minimalMode = false 
           {!minimalMode && (
             <div className="flex-1 flex items-center gap-3">
               <img 
-                src={logoImage} 
+                src={isDark ? LOGO_DARK : LOGO_LIGHT} 
                 alt="Hafalin" 
-                className="w-8 h-8 md:w-10 md:h-10 object-contain"
+                className="h-10 w-auto sm:h-12 md:h-14 object-contain"
               />
             </div>
           )}
