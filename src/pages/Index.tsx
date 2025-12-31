@@ -51,7 +51,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background islamic-pattern">
-      <Header subtitle="Hafal Al-Qur'an dengan Suara" />
+      <Header />
 
       <main className="container py-6 pb-24">
         {/* Hero Section */}

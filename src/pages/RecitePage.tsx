@@ -248,7 +248,7 @@ const RecitePage = () => {
   if (error || !surah) {
     return (
       <div className="min-h-screen bg-background islamic-pattern">
-        <Header showBack />
+        <Header showBack minimalMode />
         <div className="flex flex-col items-center justify-center py-32">
           <p className="text-destructive mb-4">{error || 'Surah tidak ditemukan'}</p>
           <button
@@ -265,7 +265,7 @@ const RecitePage = () => {
   if (!isSupported) {
     return (
       <div className="min-h-screen bg-background islamic-pattern">
-        <Header title={surah.name} subtitle={surah.englishName} showBack />
+        <Header title={surah.name} subtitle={surah.englishName} showBack minimalMode />
         <div className="container py-12">
           <div className="text-center p-8 rounded-2xl bg-destructive/10 border border-destructive/20">
             <p className="text-destructive font-semibold mb-2">
@@ -282,7 +282,7 @@ const RecitePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header title={surah.name} subtitle={surah.englishName} showBack />
+      <Header title={surah.name} subtitle={surah.englishName} showBack minimalMode />
 
       <main className="container py-6 pb-48 md:pb-40">
         {/* Ayah Display - Tarteel Style */}

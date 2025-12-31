@@ -142,7 +142,7 @@
   }
 
   .card-islamic {
-    background: var(--gradient-card);
+    background: hsl(var(--card));
     box-shadow: var(--shadow-md);
     border: 1px solid hsl(var(--border));
     transition: all 0.3s ease;
@@ -151,6 +151,7 @@
   .card-islamic:hover {
     box-shadow: var(--shadow-lg);
     transform: translateY(-2px);
+    background: hsl(var(--card));
   }
 
   .btn-islamic {
