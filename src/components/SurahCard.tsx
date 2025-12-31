@@ -12,9 +12,9 @@ export function SurahCard({ surah, onClick }: SurahCardProps) {
       onClick={onClick}
       className="card-islamic w-full p-4 rounded-xl flex items-center gap-4 text-right group"
     >
-      {/* Surah Number */}
-      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <span className="text-lg font-semibold text-primary font-arabic">
+      {/* Surah Number - Circle */}
+      <div className="w-12 h-12 rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center flex-shrink-0">
+        <span className="text-lg font-semibold text-primary">
           {surah.number}
         </span>
       </div>
