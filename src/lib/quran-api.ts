@@ -92,6 +92,7 @@ export interface ValidationResult {
 export interface WordResult {
   word: string;
   expected: string;
+  originalExpected: string; // Original text with harakat
   isCorrect: boolean;
   position: number;
 }
@@ -107,6 +108,9 @@ export function validateRecitation(
   const userWords = normalizedUser.split(' ').filter(w => w.length > 0);
   const referenceWords = normalizedReference.split(' ').filter(w => w.length > 0);
   
+  // Keep original words with harakat for display
+  const originalWords = referenceAyah.split(' ').filter(w => w.length > 0);
+  
   const wordResults: WordResult[] = [];
   let correctCount = 0;
   
@@ -116,6 +120,7 @@ export function validateRecitation(
   for (let i = 0; i < maxLength; i++) {
     const userWord = userWords[i] || '';
     const refWord = referenceWords[i] || '';
+    const originalWord = originalWords[i] || refWord;
     
     const isCorrect = userWord === refWord;
     if (isCorrect) correctCount++;
@@ -123,6 +128,7 @@ export function validateRecitation(
     wordResults.push({
       word: userWord,
       expected: refWord,
+      originalExpected: originalWord,
       isCorrect,
       position: i,
     });
