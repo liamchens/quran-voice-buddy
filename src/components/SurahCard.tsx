@@ -9,6 +9,9 @@ interface SurahCardProps {
 export function SurahCard({ surah, onClick }: SurahCardProps) {
   const revelationPlace = surah.revelationType === 'Meccan' ? 'Mekah' : 'Madinah';
   
+  // Remove "سورة" prefix from Arabic name
+  const arabicName = surah.name.replace(/^سُورَةُ\s*/, '').replace(/^سورة\s*/, '');
+  
   return (
     <button
       onClick={onClick}
@@ -17,7 +20,7 @@ export function SurahCard({ surah, onClick }: SurahCardProps) {
       {/* Surah Number - Islamic Star */}
       <div className="relative w-11 h-11 flex items-center justify-center flex-shrink-0">
         <img 
-          src="https://2zojb93ygj.ucarcdn.net/bdb1428f-4e8d-4bed-b031-5f99d5f3f8a2/bintang.png"
+          src="https://2zojb93ygj.ucarecdn.net/bdb1428f-4e8d-4bed-b031-5f99d5f3f8a2/bintang.png"
           alt=""
           className="absolute inset-0 w-full h-full object-contain"
         />
@@ -49,7 +52,7 @@ export function SurahCard({ surah, onClick }: SurahCardProps) {
       {/* Arabic Name - Right */}
       <div className="text-right flex-shrink-0">
         <h3 className="font-arabic text-2xl font-bold text-primary">
-          {surah.name}
+          {arabicName}
         </h3>
       </div>
     </button>
