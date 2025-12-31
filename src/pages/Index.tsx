@@ -122,11 +122,10 @@ const Index = () => {
       </main>
 
       {/* Footer Note */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-background/90 backdrop-blur-lg border-t border-border py-3">
+      <footer className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md border-t border-border/50 py-3">
         <div className="container">
           <p className="text-xs text-center text-muted-foreground">
-            ⚠️ Sistem ini hanya alat bantu hafalan, bukan penentu hukum tajwid.
-            Tetap belajar dengan guru.
+            ⚠️ Sistem ini hanya alat bantu hafalan, bukan penentu hukum tajwid. Tetap belajar dengan guru.
           </p>
         </div>
       </footer>
