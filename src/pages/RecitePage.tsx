@@ -1,27 +1,33 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { VoiceIndicator } from '@/components/VoiceIndicator';
-import { ValidationBadge } from '@/components/ValidationBadge';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import {
   fetchSurahDetail,
   SurahDetail,
-  validateRecitation,
-  ValidationResult,
   normalizeArabic,
 } from '@/lib/quran-api';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+
+interface WordStatus {
+  word: string;
+  status: 'pending' | 'correct' | 'incorrect';
+}
+
+interface AyahStatus {
+  ayahIndex: number;
+  words: WordStatus[];
+  isComplete: boolean;
+}
 
 const RecitePage = () => {
   const { surahNumber } = useParams<{ surahNumber: string }>();
   const [surah, setSurah] = useState<SurahDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   const {
     isListening,
@@ -34,44 +40,68 @@ const RecitePage = () => {
     error: speechError,
   } = useSpeechRecognition();
 
-  // Current ayah
-  const currentAyah = useMemo(() => {
-    return surah?.ayahs[currentAyahIndex];
-  }, [surah, currentAyahIndex]);
+  // Build all words from all ayahs
+  const allWordsFlat = useMemo(() => {
+    if (!surah) return [];
+    const words: { word: string; normalized: string; ayahIndex: number; wordIndex: number }[] = [];
+    
+    surah.ayahs.forEach((ayah, ayahIdx) => {
+      const ayahWords = ayah.text.split(' ').filter(w => w.length > 0);
+      const normalizedAyah = normalizeArabic(ayah.text);
+      const normalizedWords = normalizedAyah.split(' ').filter(w => w.length > 0);
+      
+      ayahWords.forEach((word, wordIdx) => {
+        words.push({
+          word,
+          normalized: normalizedWords[wordIdx] || '',
+          ayahIndex: ayahIdx,
+          wordIndex: wordIdx,
+        });
+      });
+    });
+    
+    return words;
+  }, [surah]);
 
-  // Split current ayah into words with original text
-  const ayahWords = useMemo(() => {
-    if (!currentAyah) return [];
-    return currentAyah.text.split(' ').filter(w => w.length > 0);
-  }, [currentAyah]);
-
-  // Real-time word matching - only show words that user has spoken
-  const liveWordResults = useMemo(() => {
-    if (!currentAyah) return [];
+  // Real-time matching across all ayahs
+  const ayahStatuses = useMemo((): AyahStatus[] => {
+    if (!surah) return [];
     
     const fullTranscript = (transcript + ' ' + interimTranscript).trim();
-    
     const normalizedUser = normalizeArabic(fullTranscript);
     const userWords = normalizedUser.split(' ').filter(w => w.length > 0);
     
-    const normalizedAyah = normalizeArabic(currentAyah.text);
-    const referenceWords = normalizedAyah.split(' ').filter(w => w.length > 0);
-    
-    // Only return results for words that have been spoken
-    const spokenCount = userWords.length;
-    
-    return ayahWords.slice(0, spokenCount).map((originalWord, index) => {
-      const refWord = referenceWords[index] || '';
-      const userWord = userWords[index] || '';
-      
-      const isCorrect = userWord === refWord;
-      return { 
-        originalWord, 
-        status: isCorrect ? 'correct' as const : 'incorrect' as const,
-        userWord 
+    const statuses: AyahStatus[] = surah.ayahs.map((ayah, ayahIdx) => {
+      const ayahWords = ayah.text.split(' ').filter(w => w.length > 0);
+      return {
+        ayahIndex: ayahIdx,
+        words: ayahWords.map(w => ({ word: w, status: 'pending' as const })),
+        isComplete: false,
       };
     });
-  }, [currentAyah, transcript, interimTranscript, ayahWords]);
+    
+    // Match user words to reference words
+    let userWordIndex = 0;
+    for (let i = 0; i < allWordsFlat.length && userWordIndex < userWords.length; i++) {
+      const refWord = allWordsFlat[i];
+      const userWord = userWords[userWordIndex];
+      
+      const isCorrect = userWord === refWord.normalized;
+      statuses[refWord.ayahIndex].words[refWord.wordIndex] = {
+        word: refWord.word,
+        status: isCorrect ? 'correct' : 'incorrect',
+      };
+      userWordIndex++;
+    }
+    
+    // Mark ayahs as complete
+    statuses.forEach(status => {
+      const allSpoken = status.words.every(w => w.status !== 'pending');
+      status.isComplete = allSpoken;
+    });
+    
+    return statuses;
+  }, [surah, transcript, interimTranscript, allWordsFlat]);
 
   // Load surah data
   useEffect(() => {
@@ -97,43 +127,26 @@ const RecitePage = () => {
       stopListening();
     } else {
       resetTranscript();
-      setValidationResult(null);
       startListening();
     }
   }, [isListening, startListening, stopListening, resetTranscript]);
 
-  // Validate when user stops speaking
-  useEffect(() => {
-    if (!currentAyah || !transcript || isListening) return;
-
-    const result = validateRecitation(transcript, currentAyah.text, currentAyah.numberInSurah);
-    setValidationResult(result);
-  }, [transcript, isListening, currentAyah]);
-
-  // Navigate to next ayah
-  const handleNextAyah = useCallback(() => {
-    if (!surah) return;
-    if (currentAyahIndex < surah.numberOfAyahs - 1) {
-      setCurrentAyahIndex(prev => prev + 1);
-      resetTranscript();
-      setValidationResult(null);
-    }
-  }, [currentAyahIndex, surah, resetTranscript]);
-
-  // Navigate to previous ayah
-  const handlePrevAyah = useCallback(() => {
-    if (currentAyahIndex > 0) {
-      setCurrentAyahIndex(prev => prev - 1);
-      resetTranscript();
-      setValidationResult(null);
-    }
-  }, [currentAyahIndex, resetTranscript]);
-
-  // Retry current ayah
+  // Retry - reset transcript
   const handleRetry = useCallback(() => {
     resetTranscript();
-    setValidationResult(null);
   }, [resetTranscript]);
+
+  // Check if all ayahs are complete
+  const allComplete = useMemo(() => {
+    return ayahStatuses.length > 0 && ayahStatuses.every(s => s.isComplete);
+  }, [ayahStatuses]);
+
+  // Check how many words have been spoken
+  const spokenWordsCount = useMemo(() => {
+    return ayahStatuses.reduce((count, status) => {
+      return count + status.words.filter(w => w.status !== 'pending').length;
+    }, 0);
+  }, [ayahStatuses]);
 
   if (isLoading) {
     return (
@@ -184,7 +197,7 @@ const RecitePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header title={surah.name} subtitle={`${surah.englishName} • Ayat ${currentAyahIndex + 1}`} showBack />
+      <Header title={surah.name} subtitle={surah.englishName} showBack />
 
       <main className="container py-6 pb-40">
         {/* Ayah Display - Tarteel Style */}
@@ -194,118 +207,76 @@ const RecitePage = () => {
             <p className="font-arabic text-xl text-primary">{surah.name}</p>
           </div>
 
-          {/* Bismillah for first ayah (except Al-Fatihah and At-Taubah) */}
-          {currentAyahIndex === 0 && parseInt(surahNumber || '1') !== 1 && parseInt(surahNumber || '1') !== 9 && (
+          {/* Bismillah (except Al-Fatihah and At-Taubah) */}
+          {parseInt(surahNumber || '1') !== 1 && parseInt(surahNumber || '1') !== 9 && (
             <p className="font-arabic text-xl text-center text-muted-foreground mb-6" dir="rtl">
               بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
             </p>
           )}
 
-          {/* Ayah Text - Hidden until user speaks */}
-          <div className="text-center min-h-[120px] flex items-center justify-center">
-            {liveWordResults.length > 0 || validationResult ? (
-              <p className="font-arabic text-2xl md:text-3xl leading-[2.5] text-right" dir="rtl">
-                {validationResult ? (
-                  // Final result highlighting
-                  validationResult.wordResults.map((result, index) => (
-                    <span
-                      key={index}
-                      className={cn(
-                        'mx-0.5 px-1 rounded transition-all duration-200',
-                        result.isCorrect 
-                          ? 'text-success bg-success/15' 
-                          : 'text-destructive bg-destructive/15 underline decoration-wavy'
-                      )}
-                    >
-                      {result.originalExpected}
-                    </span>
-                  ))
-                ) : (
-                  // Live highlighting while speaking - only show spoken words
-                  liveWordResults.map((result, index) => (
-                    <span
-                      key={index}
-                      className={cn(
-                        'mx-0.5 px-1 rounded transition-all duration-200',
-                        result.status === 'correct' && 'text-success bg-success/15',
-                        result.status === 'incorrect' && 'text-destructive bg-destructive/15 underline decoration-wavy'
-                      )}
-                    >
-                      {result.originalWord}
-                    </span>
-                  ))
-                )}
-                {/* Ayah number marker */}
-                <span className="inline-flex items-center justify-center w-8 h-8 mx-2 text-sm rounded-full bg-primary/10 text-primary font-sans">
-                  {currentAyahIndex + 1}
-                </span>
-              </p>
+          {/* All Ayahs - Real-time display */}
+          <div className="space-y-4" dir="rtl">
+            {spokenWordsCount > 0 ? (
+              // Show ayahs with real-time highlighting
+              ayahStatuses.map((ayahStatus, ayahIdx) => {
+                // Only show ayah if at least one word has been spoken
+                const hasSpokenWords = ayahStatus.words.some(w => w.status !== 'pending');
+                if (!hasSpokenWords) return null;
+                
+                return (
+                  <p key={ayahIdx} className="font-arabic text-2xl md:text-3xl leading-[2.5] text-right">
+                    {ayahStatus.words.map((wordStatus, wordIdx) => {
+                      if (wordStatus.status === 'pending') return null;
+                      return (
+                        <span
+                          key={wordIdx}
+                          className={cn(
+                            'mx-0.5 px-1 rounded transition-all duration-200',
+                            wordStatus.status === 'correct' && 'text-success bg-success/15',
+                            wordStatus.status === 'incorrect' && 'text-destructive bg-destructive/15 underline decoration-wavy'
+                          )}
+                        >
+                          {wordStatus.word}
+                        </span>
+                      );
+                    })}
+                    {/* Ayah number marker - show only when ayah is complete */}
+                    {ayahStatus.isComplete && (
+                      <span className="inline-flex items-center justify-center min-w-[2rem] h-8 mx-2 px-2 text-sm rounded-full bg-primary/10 text-primary font-sans">
+                        ۝{ayahIdx + 1}
+                      </span>
+                    )}
+                  </p>
+                );
+              })
             ) : (
               // Empty state - waiting for user to speak
               <div className="text-center py-8">
                 <p className="text-muted-foreground text-lg mb-2">
-                  Ayat ke-{currentAyahIndex + 1}
+                  Surah {surah.englishName} ({surah.numberOfAyahs} Ayat)
                 </p>
                 <p className="text-muted-foreground/60 text-sm">
-                  Silakan mulai membaca, ayat akan muncul...
+                  Silakan mulai membaca, ayat akan muncul secara real-time...
                 </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Validation Result Badge */}
-        {validationResult && (
-          <div className="flex flex-col items-center gap-4 mb-6 slide-up">
-            <ValidationBadge
-              isValid={validationResult.isValid}
-              matchPercentage={validationResult.matchPercentage}
-            />
-            <p className="text-center text-foreground font-medium text-sm">
-              {validationResult.message}
-            </p>
-            
-            {/* Retry button for invalid */}
-            {!validationResult.isValid && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRetry}
-                className="gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Ulangi
-              </Button>
-            )}
+        {/* Retry button */}
+        {spokenWordsCount > 0 && (
+          <div className="flex justify-center mb-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetry}
+              className="gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Ulangi dari Awal
+            </Button>
           </div>
         )}
-
-        {/* Navigation */}
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <Button
-            variant="outline"
-            onClick={handlePrevAyah}
-            disabled={currentAyahIndex === 0}
-            className="gap-2"
-          >
-            <ChevronRight className="w-4 h-4" />
-            Sebelumnya
-          </Button>
-          
-          <span className="text-sm text-muted-foreground">
-            {currentAyahIndex + 1} / {surah.numberOfAyahs}
-          </span>
-          
-          <Button
-            variant="outline"
-            onClick={handleNextAyah}
-            disabled={currentAyahIndex >= surah.numberOfAyahs - 1}
-            className="gap-2"
-          >
-            Selanjutnya
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-        </div>
 
         {/* Speech Error */}
         {speechError && (
@@ -315,7 +286,7 @@ const RecitePage = () => {
         )}
 
         {/* Completion Message */}
-        {currentAyahIndex >= surah.numberOfAyahs - 1 && validationResult?.isValid && (
+        {allComplete && (
           <div className="text-center p-8 rounded-2xl bg-success/10 border border-success/20 slide-up">
             <p className="text-2xl mb-2">🎉</p>
             <h3 className="text-xl font-bold text-success mb-2">

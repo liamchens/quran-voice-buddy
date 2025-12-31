@@ -42,7 +42,8 @@ export async function fetchAllSurahs(): Promise<Surah[]> {
 }
 
 export async function fetchSurahDetail(surahNumber: number): Promise<SurahDetail> {
-  const response = await fetch(`${BASE_URL}/surah/${surahNumber}/ar`);
+  // Use quran-uthmani edition for full harakat
+  const response = await fetch(`${BASE_URL}/surah/${surahNumber}/quran-uthmani`);
   const data = await response.json();
   
   if (data.code !== 200) {
