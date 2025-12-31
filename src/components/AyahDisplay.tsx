@@ -28,7 +28,7 @@ export function AyahDisplay({ ayahText, wordResults, ayahNumber }: AyahDisplayPr
                   : 'text-destructive bg-destructive/10'
               )}
             >
-              {result.expected || result.word}
+              {result.originalExpected || result.expected || result.word}
             </span>
           ))}
         </p>
