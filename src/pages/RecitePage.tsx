@@ -472,28 +472,53 @@ const RecitePage = () => {
                 {wordStatuses.map((wordStatus, idx) => {
                   if (wordStatus.status === 'pending') return null;
                   
-                  const isIncorrect = wordStatus.status === 'incorrect';
+                  const isSkipped = wordStatus.status === 'incorrect';
+                  
+                  // Check if this is the first skipped word of an ayah (to show ayah label)
+                  const isFirstSkippedInAyah = isSkipped && (
+                    idx === 0 || 
+                    wordStatuses[idx - 1]?.ayahIndex !== wordStatus.ayahIndex ||
+                    wordStatuses[idx - 1]?.status !== 'incorrect'
+                  );
+                  
+                  // Check if entire ayah was skipped
+                  const ayahWords = wordStatuses.filter(w => w.ayahIndex === wordStatus.ayahIndex);
+                  const allAyahSkipped = ayahWords.every(w => w.status === 'incorrect');
+                  const someAyahSkipped = ayahWords.some(w => w.status === 'incorrect');
                   
                   return (
                     <span key={idx} className="relative group inline">
+                      {/* Show "Ayat X Terlewat" label at start of skipped ayah */}
+                      {isFirstSkippedInAyah && allAyahSkipped && (
+                        <span className="inline-flex items-center gap-1 mx-2 px-2 py-0.5 text-xs bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full font-sans whitespace-nowrap">
+                          ⚠️ Ayat {wordStatus.ayahIndex + 1} Terlewat
+                        </span>
+                      )}
                       <span
                         className={cn(
                           'px-0.5 rounded transition-all duration-200',
                           wordStatus.status === 'correct' && 'text-success',
-                          isIncorrect && 'text-amber-500'
+                          isSkipped && 'text-amber-500 bg-amber-500/10'
                         )}
                       >
                         {wordStatus.word}
                       </span>
-                      {/* Error tooltip for incorrect/skipped */}
-                      {isIncorrect && (
+                      {/* Tooltip for individual skipped words (within partially correct ayah) */}
+                      {isSkipped && !allAyahSkipped && (
                         <span className="absolute -top-8 right-0 z-10 hidden group-hover:block bg-amber-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap font-sans">
-                          Ayat terlewat
+                          Kata terlewat
                         </span>
                       )}
                       {/* Ayah end marker */}
                       {wordStatus.isLastWord && (
-                        <span className="inline-flex items-center justify-center w-6 h-6 mx-1 text-xs rounded-full border border-primary/30 text-primary font-sans">
+                        <span className={cn(
+                          "inline-flex items-center justify-center w-6 h-6 mx-1 text-xs rounded-full border font-sans",
+                          allAyahSkipped
+                            ? "border-amber-500/50 text-amber-500 bg-amber-500/10"
+                            : someAyahSkipped
+                              ? "border-amber-500/30 text-amber-600"
+                              : "border-primary/30 text-primary"
+                        )}>
                           {wordStatus.ayahIndex + 1}
                         </span>
                       )}
