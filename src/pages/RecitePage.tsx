@@ -184,15 +184,38 @@ const RecitePage = () => {
       const CURRENT_MATCH_THRESHOLD = Math.min(85, baseThreshold + shortWordBoost);
 
       // KETAT untuk skip: hanya tandai "terlewat" kalau benar-benar yakin user lompat.
-      // (1) Kata sekarang tidak match
-      // (2) Ada kata jauh di depan yang match sangat tinggi
-      // (3) DAN dikonfirmasi oleh kata berikutnya (biar noise 1 kata tidak bikin "terlewat")
-      const SKIP_DETECT_THRESHOLD = 80;
-      const SKIP_CONFIRM_THRESHOLD = 70;
+      // Dibuat ekstra ketat saat pindah ayat supaya ayat berikutnya tidak kebuka karena noise.
+      const SKIP_DETECT_THRESHOLD_SAME_AYAH = 85;
+      const SKIP_DETECT_THRESHOLD_NEXT_AYAH = 92;
+      const SKIP_CONFIRM_THRESHOLD_SAME_AYAH = 70;
+      const SKIP_CONFIRM_THRESHOLD_NEXT_AYAH = 85;
 
       const currentSimilarity = calculateSimilarity(userWord, currentRef.normalized);
 
       if (currentSimilarity >= CURRENT_MATCH_THRESHOLD) {
+        // Anti-bocor ayat: kalau ini awal ayat, butuh konfirmasi 2 kata supaya noise 1 kata
+        // tidak langsung membuka ayat berikutnya.
+        if (isAyahStart) {
+          const nextExpectedStart = wordStatuses[newCurrentIndex + 1]?.normalized;
+          const nextUserWordStart = newWords[wIdx + 1];
+
+          // Kalau belum ada kata berikutnya, tunggu dulu (jangan advance)
+          if (nextExpectedStart && !nextUserWordStart) {
+            break;
+          }
+
+          if (nextExpectedStart && nextUserWordStart) {
+            const nextSimStart = calculateSimilarity(nextUserWordStart, nextExpectedStart);
+            const START_CONFIRM_THRESHOLD = 45;
+
+            if (nextSimStart < START_CONFIRM_THRESHOLD) {
+              // Kemungkinan noise yang kebetulan mirip kata pertama -> abaikan
+              processedInThisRun++;
+              continue;
+            }
+          }
+        }
+
         updatedStatuses[newCurrentIndex] = {
           ...currentRef,
           status: 'correct',
@@ -215,8 +238,17 @@ const RecitePage = () => {
 
         if (!sameAyah && !isNextAyahFirstWord) break;
 
-        const aheadSimilarity = calculateSimilarity(userWord, wordStatuses[i].normalized);
-        if (aheadSimilarity >= SKIP_DETECT_THRESHOLD) {
+        const candidate = wordStatuses[i];
+        const isCrossAyah = isNextAyahFirstWord;
+        const minLen = isCrossAyah ? 4 : 3;
+        if ((candidate.normalized?.length || 0) < minLen) continue;
+
+        const detectThreshold = isCrossAyah
+          ? SKIP_DETECT_THRESHOLD_NEXT_AYAH
+          : SKIP_DETECT_THRESHOLD_SAME_AYAH;
+
+        const aheadSimilarity = calculateSimilarity(userWord, candidate.normalized);
+        if (aheadSimilarity >= detectThreshold) {
           foundAhead = i;
           break;
         }
@@ -236,7 +268,19 @@ const RecitePage = () => {
           ? calculateSimilarity(nextUserWord, nextExpected)
           : 0;
 
-        if (nextExpected && nextSimilarity >= SKIP_CONFIRM_THRESHOLD) {
+        const isCrossAyahJump =
+          currentRef.isLastWord &&
+          wordStatuses[foundAhead].ayahIndex === currentAyah + 1;
+
+        const baseConfirmThreshold = isCrossAyahJump
+          ? SKIP_CONFIRM_THRESHOLD_NEXT_AYAH
+          : SKIP_CONFIRM_THRESHOLD_SAME_AYAH;
+
+        const nextLen = nextExpected?.length || 0;
+        const confirmBoost = nextLen <= 2 ? 10 : 0;
+        const requiredConfirm = Math.min(95, baseConfirmThreshold + confirmBoost);
+
+        if (nextExpected && nextSimilarity >= requiredConfirm) {
           // User benar-benar lompat -> tandai kata yang dilewati sebagai incorrect
           for (let i = newCurrentIndex; i < foundAhead; i++) {
             const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
