@@ -28,8 +28,13 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [interimTranscript, setInterimTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(false);
-  
+
   const recognitionRef = useRef<any>(null);
+
+  // Track user intent: keep listening until user presses stop
+  const shouldBeListeningRef = useRef(false);
+  const restartTimeoutRef = useRef<number | null>(null);
+  const restartAttemptsRef = useRef(0);
 
   useEffect(() => {
     // Check for browser support
@@ -45,15 +50,50 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       
       recognition.onstart = () => {
         setIsListening(true);
+        restartAttemptsRef.current = 0;
         setError(null);
       };
       
       recognition.onend = () => {
+        // Chrome mobile sering berhenti sendiri saat hening.
+        // Kalau user belum menekan stop, kita auto-restart supaya tetap listening.
+        if (shouldBeListeningRef.current) {
+          // Tetap tampilkan status "mendengarkan" di UI
+          setIsListening(true);
+
+          if (restartTimeoutRef.current) {
+            window.clearTimeout(restartTimeoutRef.current);
+          }
+
+          const attempt = restartAttemptsRef.current;
+          const delayMs = Math.min(1500, 250 + attempt * 250);
+
+          restartTimeoutRef.current = window.setTimeout(() => {
+            try {
+              recognition.start();
+            } catch {
+              // ignore - bisa terjadi kalau start dipanggil saat masih dianggap aktif
+            }
+          }, delayMs);
+
+          restartAttemptsRef.current = Math.min(restartAttemptsRef.current + 1, 6);
+          return;
+        }
+
         setIsListening(false);
       };
       
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        // Jangan langsung mematikan sesi kalau error yang umum di mobile (no-speech/aborted).
+        // Tetap restart kalau user masih ingin listening.
+        const err = event.error;
+
+        if (shouldBeListeningRef.current && (err === 'no-speech' || err === 'aborted' || err === 'network' || err === 'audio-capture')) {
+          return;
+        }
+
         setError(`Error: ${event.error}`);
+        shouldBeListeningRef.current = false;
         setIsListening(false);
       };
       
@@ -83,7 +123,11 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
     }
     
     return () => {
+      if (restartTimeoutRef.current) {
+        window.clearTimeout(restartTimeoutRef.current);
+      }
       if (recognitionRef.current) {
+        shouldBeListeningRef.current = false;
         recognitionRef.current.stop();
       }
     };
@@ -91,18 +135,30 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
   const startListening = useCallback(() => {
     if (recognitionRef.current && !isListening) {
+      shouldBeListeningRef.current = true;
+
       try {
         recognitionRef.current.start();
-      } catch (e) {
+      } catch {
         // Recognition might already be started
       }
+    } else if (recognitionRef.current && isListening) {
+      // Already listening, but ensure intent is set
+      shouldBeListeningRef.current = true;
     }
   }, [isListening]);
 
   const stopListening = useCallback(() => {
+    if (restartTimeoutRef.current) {
+      window.clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = null;
+    }
+    shouldBeListeningRef.current = false;
+
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
     }
+    setIsListening(false);
   }, [isListening]);
 
   const resetTranscript = useCallback(() => {
