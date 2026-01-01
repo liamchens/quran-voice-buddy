@@ -56,31 +56,6 @@ const getRandomAppreciation = (isComplete: boolean, hasSkipped: boolean) => {
   return list[Math.floor(Math.random() * list.length)];
 };
 
-// Calculate similarity between two strings (moved outside component)
-const calculateSimilarity = (str1: string, str2: string): number => {
-  if (str1 === str2) return 1;
-  if (!str1.length || !str2.length) return 0;
-  
-  const longer = str1.length > str2.length ? str1 : str2;
-  const shorter = str1.length > str2.length ? str2 : str1;
-  
-  // Quick check: if lengths differ too much, low similarity
-  if (longer.length - shorter.length > 3) return 0.3;
-  
-  // Check if one contains the other
-  if (longer.includes(shorter) || shorter.includes(longer)) {
-    return shorter.length / longer.length;
-  }
-  
-  // Count matching characters
-  let matches = 0;
-  for (let i = 0; i < shorter.length; i++) {
-    if (longer.includes(shorter[i])) matches++;
-  }
-  
-  return matches / longer.length;
-};
-
 const RecitePage = () => {
   const { surahNumber } = useParams<{ surahNumber: string }>();
   const [surah, setSurah] = useState<SurahDetail | null>(null);
@@ -122,7 +97,7 @@ const RecitePage = () => {
     return words;
   }, [surah]);
 
-  // Strict matching - only show words that match user speech
+  // Real-time matching - only mark skipped ayahs as error
   const wordStatuses = useMemo(() => {
     if (!surah || allWordsFlat.length === 0) return [];
     
@@ -143,55 +118,41 @@ const RecitePage = () => {
     if (userWords.length === 0) return statuses;
     
     let refIndex = 0;
+    let userIndex = 0;
     
-    // Match each user word to reference words sequentially
-    for (let userIndex = 0; userIndex < userWords.length && refIndex < allWordsFlat.length; userIndex++) {
+    while (userIndex < userWords.length && refIndex < allWordsFlat.length) {
       const userWord = userWords[userIndex];
+      const refWord = allWordsFlat[refIndex];
       
-      // Try exact match with current reference word
-      if (userWord === allWordsFlat[refIndex].normalized) {
+      // Exact match - correct
+      if (userWord === refWord.normalized) {
         statuses[refIndex] = { 
-          word: allWordsFlat[refIndex].word, 
+          word: refWord.word, 
           status: 'correct',
-          isLastWord: allWordsFlat[refIndex].isLastWord,
-          ayahNumber: allWordsFlat[refIndex].ayahIndex + 1,
+          isLastWord: refWord.isLastWord,
+          ayahNumber: refWord.ayahIndex + 1,
         };
         refIndex++;
+        userIndex++;
         continue;
       }
       
-      // Try partial/fuzzy match - check if user word is similar enough (at least 70% match)
-      const similarity = calculateSimilarity(userWord, allWordsFlat[refIndex].normalized);
-      if (similarity >= 0.7) {
-        statuses[refIndex] = { 
-          word: allWordsFlat[refIndex].word, 
-          status: 'correct',
-          isLastWord: allWordsFlat[refIndex].isLastWord,
-          ayahNumber: allWordsFlat[refIndex].ayahIndex + 1,
-        };
-        refIndex++;
-        continue;
-      }
-      
-      // Look ahead within a limited window (max 5 words) to detect skipped words
+      // Look ahead to detect skipped words (user jumped ahead) - search entire remaining surah
       let foundAhead = -1;
-      const maxLookAhead = Math.min(refIndex + 5, allWordsFlat.length);
-      
-      for (let lookAhead = refIndex + 1; lookAhead < maxLookAhead; lookAhead++) {
-        const aheadWord = allWordsFlat[lookAhead].normalized;
-        if (userWord === aheadWord || calculateSimilarity(userWord, aheadWord) >= 0.7) {
+      for (let lookAhead = refIndex + 1; lookAhead < allWordsFlat.length; lookAhead++) {
+        if (userWord === allWordsFlat[lookAhead].normalized) {
           foundAhead = lookAhead;
           break;
         }
       }
       
       if (foundAhead !== -1) {
-        // Mark skipped words
+        // Mark all skipped words as skipped (ayat terlewat)
         for (let skip = refIndex; skip < foundAhead; skip++) {
           statuses[skip] = {
             word: allWordsFlat[skip].word,
             status: 'skipped',
-            errorReason: 'Terlewat',
+            errorReason: 'Ayat terlewat',
             isLastWord: allWordsFlat[skip].isLastWord,
             ayahNumber: allWordsFlat[skip].ayahIndex + 1,
           };
@@ -204,12 +165,24 @@ const RecitePage = () => {
           ayahNumber: allWordsFlat[foundAhead].ayahIndex + 1,
         };
         refIndex = foundAhead + 1;
+        userIndex++;
+      } else {
+        // No exact match found anywhere - tolerance for pronunciation variations
+        // Mark current reference word as correct and move on
+        statuses[refIndex] = {
+          word: refWord.word,
+          status: 'correct',
+          isLastWord: refWord.isLastWord,
+          ayahNumber: refWord.ayahIndex + 1,
+        };
+        refIndex++;
+        userIndex++;
       }
-      // If no match found, ignore this user word (might be noise or unrecognized)
     }
     
     return statuses;
   }, [surah, transcript, interimTranscript, allWordsFlat]);
+
   // Check how many words have been spoken
   const spokenWordsCount = useMemo(() => {
     return wordStatuses.filter(w => w.status !== 'pending').length;
