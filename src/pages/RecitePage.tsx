@@ -165,12 +165,11 @@ const RecitePage = () => {
       if (newCurrentIndex >= wordStatuses.length) break;
       
       const currentRef = wordStatuses[newCurrentIndex];
-      const similarity = calculateSimilarity(userWord, currentRef.normalized);
-      
-      // STRICT matching: 60% similarity threshold for pronunciation tolerance
-      const SIMILARITY_THRESHOLD = 60;
-      
-      if (similarity >= SIMILARITY_THRESHOLD) {
+
+      // Tidak koreksi tajwid: kita hanya lanjut kalau kata yang terdeteksi memang cocok (setelah normalisasi)
+      const isExactMatch = userWord === currentRef.normalized;
+
+      if (isExactMatch) {
         // Word matches - mark as correct
         updatedStatuses[newCurrentIndex] = {
           ...currentRef,
@@ -178,10 +177,11 @@ const RecitePage = () => {
         };
         newCurrentIndex++;
       } else {
-        // Check if user skipped ahead (look ahead max 5 words) - ONLY within the same ayah
+        // Deteksi ayat terlewat (skip) saja: cari kata yang sama beberapa kata ke depan
         const currentAyah = currentRef.ayahIndex;
         let foundAhead = -1;
 
+        // Lookahead max 5 kata
         for (let i = newCurrentIndex + 1; i < Math.min(newCurrentIndex + 6, wordStatuses.length); i++) {
           const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
           const isNextAyahFirstWord =
@@ -189,34 +189,39 @@ const RecitePage = () => {
             i === newCurrentIndex + 1 &&
             wordStatuses[i].ayahIndex === currentAyah + 1;
 
-          // Stop searching when ayah changes (prevents jumping across verses),
-          // except allow moving to the FIRST word of the next ayah when we're at the last word.
+          // Stop searching when ayah changes, kecuali boleh pindah ke kata PERTAMA ayat berikutnya
           if (!sameAyah && !isNextAyahFirstWord) break;
 
-          const aheadSimilarity = calculateSimilarity(userWord, wordStatuses[i].normalized);
-          if (aheadSimilarity >= SIMILARITY_THRESHOLD) {
+          if (userWord === wordStatuses[i].normalized) {
             foundAhead = i;
             break;
           }
         }
 
         if (foundAhead !== -1) {
-          // User skipped some words - mark skipped as incorrect (within the same ayah)
+          // Mark kata yang dilewati sebagai incorrect (Ayat terlewat)
           for (let i = newCurrentIndex; i < foundAhead; i++) {
-            if (wordStatuses[i].ayahIndex !== currentAyah) break;
+            const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
+            const isNextAyahFirstWord =
+              currentRef.isLastWord &&
+              i === newCurrentIndex + 1 &&
+              wordStatuses[i].ayahIndex === currentAyah + 1;
+
+            if (!sameAyah && !isNextAyahFirstWord) break;
+
             updatedStatuses[i] = {
               ...wordStatuses[i],
               status: 'incorrect',
             };
           }
-          // Mark the found word as correct
+          // Mark kata yang ditemukan sebagai correct
           updatedStatuses[foundAhead] = {
             ...wordStatuses[foundAhead],
             status: 'correct',
           };
           newCurrentIndex = foundAhead + 1;
         }
-        // If no match found anywhere, ignore this word (noise/misrecognition)
+        // Kalau tidak ketemu, abaikan (noise/misrecognition) dan TIDAK menandai salah
       }
     }
     
@@ -239,12 +244,13 @@ const RecitePage = () => {
     return wordStatuses.length > 0 && currentWordIndex >= wordStatuses.length;
   }, [wordStatuses.length, currentWordIndex]);
 
-  // Auto-stop when complete
-  useEffect(() => {
-    if (allComplete && isListening) {
-      stopListening();
-    }
-  }, [allComplete, isListening, stopListening]);
+  // Jangan auto-stop voice (biarkan user stop manual)
+  // Catatan: Web Speech API kadang berhenti sendiri saat hening; itu bukan dari auto-stop ini.
+  // useEffect(() => {
+  //   if (allComplete && isListening) {
+  //     stopListening();
+  //   }
+  // }, [allComplete, isListening, stopListening]);
 
   // Load surah data
   useEffect(() => {
