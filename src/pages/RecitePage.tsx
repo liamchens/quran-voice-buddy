@@ -169,12 +169,16 @@ const RecitePage = () => {
 
       const currentRef = wordStatuses[newCurrentIndex];
 
-      // Toleran untuk pengucapan, tapi jangan sampai "ngegas" (advance tanpa yakin)
-      const CURRENT_MATCH_THRESHOLD = 55;
-      const SKIP_DETECT_THRESHOLD = 75;
+      // TOLERAN: threshold rendah (40%) supaya pengucapan kurang jelas tetap dianggap benar
+      // Fokus ke bacaan dulu, bukan tajwid. Ayat muncul selama suara mirip.
+      const CURRENT_MATCH_THRESHOLD = 40;
+      // KETAT untuk skip: threshold tinggi (80%) supaya hanya tandai "terlewat" jika benar-benar lompat
+      const SKIP_DETECT_THRESHOLD = 80;
+
       const currentSimilarity = calculateSimilarity(userWord, currentRef.normalized);
 
       if (currentSimilarity >= CURRENT_MATCH_THRESHOLD) {
+        // Suara cukup mirip dengan kata saat ini -> tampilkan sebagai benar
         updatedStatuses[newCurrentIndex] = {
           ...currentRef,
           status: 'correct',
@@ -183,7 +187,7 @@ const RecitePage = () => {
         continue;
       }
 
-      // Cek skip HANYA jika benar-benar jelas user lompat ke kata lain
+      // Cek skip HANYA jika user BENAR-BENAR lompat ke kata lain dengan yakin
       const currentAyah = currentRef.ayahIndex;
       let foundAhead = -1;
 
@@ -204,6 +208,7 @@ const RecitePage = () => {
       }
 
       if (foundAhead !== -1) {
+        // User benar-benar lompat -> tandai kata yang dilewati sebagai incorrect
         for (let i = newCurrentIndex; i < foundAhead; i++) {
           const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
           const isNextAyahFirstWord =
@@ -226,8 +231,8 @@ const RecitePage = () => {
         newCurrentIndex = foundAhead + 1;
       }
 
-      // Kalau tidak match & tidak jelas skip, anggap noise / hasil STT kurang tepat:
-      // JANGAN advance supaya ayat tidak keluar terlalu cepat.
+      // Kalau tidak match DAN tidak jelas skip -> abaikan (noise dari STT)
+      // Jangan advance, tunggu input yang lebih jelas
     }
     
     // Update state
