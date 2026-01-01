@@ -169,18 +169,20 @@ const RecitePage = () => {
       
       const currentRef = wordStatuses[newCurrentIndex];
 
-      // Tidak koreksi tajwid: kita hanya lanjut kalau kata yang terdeteksi memang cocok (setelah normalisasi)
-      const isExactMatch = userWord === currentRef.normalized;
-
-      if (isExactMatch) {
-        // Word matches - mark as correct
+      // Fuzzy matching dengan threshold toleran (50%) untuk variasi pengucapan
+      // Hanya tandai "terlewat" jika user benar-benar loncat ke kata lain
+      const SIMILARITY_THRESHOLD = 50;
+      const similarity = calculateSimilarity(userWord, currentRef.normalized);
+      
+      if (similarity >= SIMILARITY_THRESHOLD) {
+        // Word matches (cukup mirip) - mark as correct
         updatedStatuses[newCurrentIndex] = {
           ...currentRef,
           status: 'correct',
         };
         newCurrentIndex++;
       } else {
-        // Deteksi ayat terlewat (skip) saja: cari kata yang sama beberapa kata ke depan
+        // Cek apakah user melompat ke kata lain (benar-benar skip/lupa)
         const currentAyah = currentRef.ayahIndex;
         let foundAhead = -1;
 
@@ -195,14 +197,15 @@ const RecitePage = () => {
           // Stop searching when ayah changes, kecuali boleh pindah ke kata PERTAMA ayat berikutnya
           if (!sameAyah && !isNextAyahFirstWord) break;
 
-          if (userWord === wordStatuses[i].normalized) {
+          const aheadSimilarity = calculateSimilarity(userWord, wordStatuses[i].normalized);
+          if (aheadSimilarity >= SIMILARITY_THRESHOLD) {
             foundAhead = i;
             break;
           }
         }
 
         if (foundAhead !== -1) {
-          // Mark kata yang dilewati sebagai incorrect (Ayat terlewat)
+          // User benar-benar loncat - mark kata yang dilewati sebagai incorrect
           for (let i = newCurrentIndex; i < foundAhead; i++) {
             const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
             const isNextAyahFirstWord =
@@ -223,8 +226,15 @@ const RecitePage = () => {
             status: 'correct',
           };
           newCurrentIndex = foundAhead + 1;
+        } else {
+          // Tidak ada match di depan - anggap ini pengucapan yang kurang jelas tapi benar
+          // Langsung mark current word sebagai correct dan lanjut
+          updatedStatuses[newCurrentIndex] = {
+            ...currentRef,
+            status: 'correct',
+          };
+          newCurrentIndex++;
         }
-        // Kalau tidak ketemu, abaikan (noise/misrecognition) dan TIDAK menandai salah
       }
     }
     
