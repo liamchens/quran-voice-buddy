@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { Header } from '@/components/Header';
@@ -14,8 +14,10 @@ import { cn } from '@/lib/utils';
 
 interface WordStatus {
   word: string;
-  status: 'pending' | 'correct' | 'skipped';
-  errorReason?: string;
+  normalized: string;
+  status: 'pending' | 'correct' | 'incorrect';
+  ayahIndex: number;
+  isLastWord: boolean;
 }
 
 // Random appreciation messages based on performance
@@ -41,26 +43,64 @@ const PERFECT_MESSAGES = [
   { title: 'Hafalan Mantap!', emoji: '⭐' },
 ];
 
-const getRandomAppreciation = (isComplete: boolean, hasSkipped: boolean) => {
+const getRandomAppreciation = (isComplete: boolean, hasIncorrect: boolean) => {
   let list;
-  if (hasSkipped) {
-    // Ada ayat terlewat - kasih pesan encouraging
+  if (hasIncorrect) {
     list = ENCOURAGING_MESSAGES;
   } else if (isComplete) {
-    // Selesai tanpa ada yang terlewat - kasih pujian kagum
     list = PERFECT_MESSAGES;
   } else {
-    // Belum selesai tapi tidak ada yang terlewat - kasih pujian bagus
     list = GOOD_MESSAGES;
   }
   return list[Math.floor(Math.random() * list.length)];
 };
+
+// Levenshtein distance for better Arabic matching
+function levenshteinDistance(str1: string, str2: string): number {
+  const m = str1.length;
+  const n = str2.length;
+  
+  if (m === 0) return n;
+  if (n === 0) return m;
+  
+  const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (str1[i - 1] === str2[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+  }
+  
+  return dp[m][n];
+}
+
+// Calculate similarity using Levenshtein
+function calculateSimilarity(str1: string, str2: string): number {
+  if (str1 === str2) return 100;
+  if (str1.length === 0 || str2.length === 0) return 0;
+  
+  const distance = levenshteinDistance(str1, str2);
+  const maxLength = Math.max(str1.length, str2.length);
+  return ((maxLength - distance) / maxLength) * 100;
+}
 
 const RecitePage = () => {
   const { surahNumber } = useParams<{ surahNumber: string }>();
   const [surah, setSurah] = useState<SurahDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Word statuses - managed as state for Tarteel-style incremental matching
+  const [wordStatuses, setWordStatuses] = useState<WordStatus[]>([]);
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const lastProcessedWordsRef = useRef<string>('');
 
   const {
     isListening,
@@ -73,146 +113,108 @@ const RecitePage = () => {
     error: speechError,
   } = useSpeechRecognition();
 
-  // Build all words from all ayahs with ayah end markers
-  const allWordsFlat = useMemo(() => {
-    if (!surah) return [];
-    const words: { word: string; normalized: string; ayahIndex: number; wordIndex: number; isLastWord: boolean }[] = [];
+  // Initialize word statuses when surah loads
+  useEffect(() => {
+    if (!surah) return;
     
+    const statuses: WordStatus[] = [];
     surah.ayahs.forEach((ayah, ayahIdx) => {
       const ayahWords = ayah.text.split(' ').filter(w => w.length > 0);
       const normalizedAyah = normalizeArabic(ayah.text);
       const normalizedWords = normalizedAyah.split(' ').filter(w => w.length > 0);
       
       ayahWords.forEach((word, wordIdx) => {
-        words.push({
+        statuses.push({
           word,
           normalized: normalizedWords[wordIdx] || '',
+          status: 'pending',
           ayahIndex: ayahIdx,
-          wordIndex: wordIdx,
           isLastWord: wordIdx === ayahWords.length - 1,
         });
       });
     });
     
-    return words;
+    setWordStatuses(statuses);
+    setCurrentWordIndex(0);
+    lastProcessedWordsRef.current = '';
   }, [surah]);
 
-  // Fuzzy match helper - calculate similarity percentage
-  const calculateSimilarity = useCallback((str1: string, str2: string): number => {
-    if (str1 === str2) return 100;
-    if (str1.length === 0 || str2.length === 0) return 0;
+  // Tarteel-style incremental matching - process one word at a time
+  useEffect(() => {
+    if (!isListening || wordStatuses.length === 0) return;
+    if (currentWordIndex >= wordStatuses.length) return;
     
-    // Simple character-based similarity
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
+    // Combine transcript for matching
+    const fullTranscript = transcript.trim();
+    const normalizedFull = normalizeArabic(fullTranscript);
+    const userWords = normalizedFull.split(' ').filter(w => w.length > 0);
     
-    let matches = 0;
-    for (let i = 0; i < shorter.length; i++) {
-      if (longer.includes(shorter[i])) {
-        matches++;
-      }
-    }
+    // Only process NEW words that haven't been processed yet
+    const lastProcessedCount = lastProcessedWordsRef.current.split(' ').filter(w => w.length > 0).length;
     
-    return (matches / longer.length) * 100;
-  }, []);
-
-  // Real-time matching - strict mode, only use FINAL transcript
-  const wordStatuses = useMemo(() => {
-    if (!surah || allWordsFlat.length === 0) return [];
+    if (userWords.length <= lastProcessedCount) return;
     
-    // IMPORTANT: Only use final transcript, NOT interim - this prevents premature matching
-    const normalizedUser = normalizeArabic(transcript.trim());
-    const userWords = normalizedUser.split(' ').filter(w => w.length > 0);
+    // Get only the new words
+    const newWords = userWords.slice(lastProcessedCount);
     
-    type ExtendedWordStatus = WordStatus & { isLastWord: boolean; ayahNumber: number };
+    // Process each new word one by one
+    let newCurrentIndex = currentWordIndex;
+    const updatedStatuses = [...wordStatuses];
     
-    // Initialize all words as pending
-    const statuses: ExtendedWordStatus[] = allWordsFlat.map(w => ({
-      word: w.word,
-      status: 'pending' as const,
-      isLastWord: w.isLastWord,
-      ayahNumber: w.ayahIndex + 1,
-    }));
-    
-    if (userWords.length === 0) return statuses;
-    
-    let refIndex = 0;
-    let userIndex = 0;
-    
-    // Minimum similarity threshold for fuzzy matching (70%)
-    const SIMILARITY_THRESHOLD = 70;
-    
-    while (userIndex < userWords.length && refIndex < allWordsFlat.length) {
-      const userWord = userWords[userIndex];
-      const refWord = allWordsFlat[refIndex];
+    for (const userWord of newWords) {
+      if (newCurrentIndex >= wordStatuses.length) break;
       
-      // Exact match - correct
-      if (userWord === refWord.normalized) {
-        statuses[refIndex] = { 
-          word: refWord.word, 
-          status: 'correct',
-          isLastWord: refWord.isLastWord,
-          ayahNumber: refWord.ayahIndex + 1,
-        };
-        refIndex++;
-        userIndex++;
-        continue;
-      }
+      const currentRef = wordStatuses[newCurrentIndex];
+      const similarity = calculateSimilarity(userWord, currentRef.normalized);
       
-      // Fuzzy match - check if similar enough (pronunciation tolerance)
-      const similarity = calculateSimilarity(userWord, refWord.normalized);
+      // STRICT matching: 60% similarity threshold for pronunciation tolerance
+      const SIMILARITY_THRESHOLD = 60;
+      
       if (similarity >= SIMILARITY_THRESHOLD) {
-        statuses[refIndex] = { 
-          word: refWord.word, 
+        // Word matches - mark as correct
+        updatedStatuses[newCurrentIndex] = {
+          ...currentRef,
           status: 'correct',
-          isLastWord: refWord.isLastWord,
-          ayahNumber: refWord.ayahIndex + 1,
         };
-        refIndex++;
-        userIndex++;
-        continue;
-      }
-      
-      // Look ahead to detect skipped words (max 10 words ahead to prevent runaway)
-      const MAX_LOOKAHEAD = 10;
-      let foundAhead = -1;
-      for (let lookAhead = refIndex + 1; lookAhead < Math.min(refIndex + MAX_LOOKAHEAD, allWordsFlat.length); lookAhead++) {
-        const aheadWord = allWordsFlat[lookAhead];
-        if (userWord === aheadWord.normalized || calculateSimilarity(userWord, aheadWord.normalized) >= SIMILARITY_THRESHOLD) {
-          foundAhead = lookAhead;
-          break;
-        }
-      }
-      
-      if (foundAhead !== -1) {
-        // Mark all skipped words as skipped (ayat terlewat)
-        for (let skip = refIndex; skip < foundAhead; skip++) {
-          statuses[skip] = {
-            word: allWordsFlat[skip].word,
-            status: 'skipped',
-            errorReason: 'Ayat terlewat',
-            isLastWord: allWordsFlat[skip].isLastWord,
-            ayahNumber: allWordsFlat[skip].ayahIndex + 1,
-          };
-        }
-        // Mark found word as correct
-        statuses[foundAhead] = { 
-          word: allWordsFlat[foundAhead].word, 
-          status: 'correct',
-          isLastWord: allWordsFlat[foundAhead].isLastWord,
-          ayahNumber: allWordsFlat[foundAhead].ayahIndex + 1,
-        };
-        refIndex = foundAhead + 1;
-        userIndex++;
+        newCurrentIndex++;
       } else {
-        // No match found - skip this user word (might be noise/misrecognition)
-        // DON'T automatically mark reference word as correct
-        userIndex++;
+        // Check if user skipped ahead (look ahead max 5 words)
+        let foundAhead = -1;
+        for (let i = newCurrentIndex + 1; i < Math.min(newCurrentIndex + 6, wordStatuses.length); i++) {
+          const aheadSimilarity = calculateSimilarity(userWord, wordStatuses[i].normalized);
+          if (aheadSimilarity >= SIMILARITY_THRESHOLD) {
+            foundAhead = i;
+            break;
+          }
+        }
+        
+        if (foundAhead !== -1) {
+          // User skipped some words - mark skipped as incorrect
+          for (let i = newCurrentIndex; i < foundAhead; i++) {
+            updatedStatuses[i] = {
+              ...wordStatuses[i],
+              status: 'incorrect',
+            };
+          }
+          // Mark the found word as correct
+          updatedStatuses[foundAhead] = {
+            ...wordStatuses[foundAhead],
+            status: 'correct',
+          };
+          newCurrentIndex = foundAhead + 1;
+        }
+        // If no match found anywhere, ignore this word (noise/misrecognition)
       }
     }
     
-    return statuses;
-  }, [surah, transcript, allWordsFlat, calculateSimilarity]);
+    // Update state
+    if (newCurrentIndex !== currentWordIndex) {
+      setWordStatuses(updatedStatuses);
+      setCurrentWordIndex(newCurrentIndex);
+    }
+    lastProcessedWordsRef.current = fullTranscript;
+    
+  }, [transcript, isListening, wordStatuses, currentWordIndex]);
 
   // Check how many words have been spoken
   const spokenWordsCount = useMemo(() => {
@@ -249,20 +251,48 @@ const RecitePage = () => {
     loadSurah();
   }, [surahNumber]);
 
+  // Reset all word statuses to pending
+  const resetWordStatuses = useCallback(() => {
+    if (!surah) return;
+    
+    const statuses: WordStatus[] = [];
+    surah.ayahs.forEach((ayah, ayahIdx) => {
+      const ayahWords = ayah.text.split(' ').filter(w => w.length > 0);
+      const normalizedAyah = normalizeArabic(ayah.text);
+      const normalizedWords = normalizedAyah.split(' ').filter(w => w.length > 0);
+      
+      ayahWords.forEach((word, wordIdx) => {
+        statuses.push({
+          word,
+          normalized: normalizedWords[wordIdx] || '',
+          status: 'pending',
+          ayahIndex: ayahIdx,
+          isLastWord: wordIdx === ayahWords.length - 1,
+        });
+      });
+    });
+    
+    setWordStatuses(statuses);
+    setCurrentWordIndex(0);
+    lastProcessedWordsRef.current = '';
+  }, [surah]);
+
   // Handle voice toggle
   const handleVoiceToggle = useCallback(() => {
     if (isListening) {
       stopListening();
     } else {
       resetTranscript();
+      resetWordStatuses();
       startListening();
     }
-  }, [isListening, startListening, stopListening, resetTranscript]);
+  }, [isListening, startListening, stopListening, resetTranscript, resetWordStatuses]);
 
-  // Retry - reset transcript
+  // Retry - reset transcript and word statuses
   const handleRetry = useCallback(() => {
     resetTranscript();
-  }, [resetTranscript]);
+    resetWordStatuses();
+  }, [resetTranscript, resetWordStatuses]);
 
   if (isLoading) {
     return (
@@ -337,7 +367,7 @@ const RecitePage = () => {
                 {wordStatuses.map((wordStatus, idx) => {
                   if (wordStatus.status === 'pending') return null;
                   
-                  const isSkipped = wordStatus.status === 'skipped';
+                  const isIncorrect = wordStatus.status === 'incorrect';
                   
                   return (
                     <span key={idx} className="relative group inline">
@@ -345,21 +375,21 @@ const RecitePage = () => {
                         className={cn(
                           'px-0.5 rounded transition-all duration-200',
                           wordStatus.status === 'correct' && 'text-success',
-                          isSkipped && 'text-amber-500'
+                          isIncorrect && 'text-amber-500'
                         )}
                       >
                         {wordStatus.word}
                       </span>
-                      {/* Error tooltip for skipped */}
-                      {isSkipped && wordStatus.errorReason && (
+                      {/* Error tooltip for incorrect/skipped */}
+                      {isIncorrect && (
                         <span className="absolute -top-8 right-0 z-10 hidden group-hover:block bg-amber-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap font-sans">
-                          {wordStatus.errorReason}
+                          Ayat terlewat
                         </span>
                       )}
                       {/* Ayah end marker */}
                       {wordStatus.isLastWord && (
                         <span className="inline-flex items-center justify-center w-6 h-6 mx-1 text-xs rounded-full border border-primary/30 text-primary font-sans">
-                          {wordStatus.ayahNumber}
+                          {wordStatus.ayahIndex + 1}
                         </span>
                       )}
                       {!wordStatus.isLastWord && <span className="inline"> </span>}
@@ -405,30 +435,30 @@ const RecitePage = () => {
 
         {/* Completion/Appreciation Message */}
         {!isListening && spokenWordsCount > 0 && (() => {
-          const hasSkipped = wordStatuses.some(w => w.status === 'skipped');
-          const appreciation = getRandomAppreciation(allComplete, hasSkipped);
+          const hasIncorrect = wordStatuses.some(w => w.status === 'incorrect');
+          const appreciation = getRandomAppreciation(allComplete, hasIncorrect);
           const progressPercent = Math.round((spokenWordsCount / wordStatuses.length) * 100);
-          const skippedCount = wordStatuses.filter(w => w.status === 'skipped').length;
+          const incorrectCount = wordStatuses.filter(w => w.status === 'incorrect').length;
           
           return (
             <div className={cn(
               "text-center p-6 md:p-8 rounded-2xl slide-up",
-              hasSkipped 
+              hasIncorrect 
                 ? "bg-amber-500/10 border border-amber-500/20" 
                 : "bg-success/10 border border-success/20"
             )}>
               <p className="text-3xl mb-2">{appreciation.emoji}</p>
               <h3 className={cn(
                 "text-lg md:text-xl font-bold mb-2",
-                hasSkipped ? "text-amber-600" : "text-success"
+                hasIncorrect ? "text-amber-600" : "text-success"
               )}>
                 {appreciation.title}
               </h3>
               <p className="text-muted-foreground text-sm md:text-base">
-                {allComplete && !hasSkipped
+                {allComplete && !hasIncorrect
                   ? `Anda telah menyelesaikan hafalan Surah ${surah.englishName} dengan sempurna. Semoga berkah!` 
-                  : hasSkipped 
-                    ? `Ada ${skippedCount} kata yang terlewat. Progres: ${progressPercent}%. Coba lagi ya!`
+                  : hasIncorrect 
+                    ? `Ada ${incorrectCount} kata yang terlewat. Progres: ${progressPercent}%. Coba lagi ya!`
                     : `Progres: ${progressPercent}% (${spokenWordsCount} dari ${wordStatuses.length} kata). Lanjutkan lagi kapan saja!`}
               </p>
               <Button
