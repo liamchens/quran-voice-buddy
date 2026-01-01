@@ -97,12 +97,31 @@ const RecitePage = () => {
     return words;
   }, [surah]);
 
-  // Real-time matching - only mark skipped ayahs as error
+  // Fuzzy match helper - calculate similarity percentage
+  const calculateSimilarity = useCallback((str1: string, str2: string): number => {
+    if (str1 === str2) return 100;
+    if (str1.length === 0 || str2.length === 0) return 0;
+    
+    // Simple character-based similarity
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    let matches = 0;
+    for (let i = 0; i < shorter.length; i++) {
+      if (longer.includes(shorter[i])) {
+        matches++;
+      }
+    }
+    
+    return (matches / longer.length) * 100;
+  }, []);
+
+  // Real-time matching - strict mode, only use FINAL transcript
   const wordStatuses = useMemo(() => {
     if (!surah || allWordsFlat.length === 0) return [];
     
-    const fullTranscript = (transcript + ' ' + interimTranscript).trim();
-    const normalizedUser = normalizeArabic(fullTranscript);
+    // IMPORTANT: Only use final transcript, NOT interim - this prevents premature matching
+    const normalizedUser = normalizeArabic(transcript.trim());
     const userWords = normalizedUser.split(' ').filter(w => w.length > 0);
     
     type ExtendedWordStatus = WordStatus & { isLastWord: boolean; ayahNumber: number };
@@ -119,6 +138,9 @@ const RecitePage = () => {
     
     let refIndex = 0;
     let userIndex = 0;
+    
+    // Minimum similarity threshold for fuzzy matching (70%)
+    const SIMILARITY_THRESHOLD = 70;
     
     while (userIndex < userWords.length && refIndex < allWordsFlat.length) {
       const userWord = userWords[userIndex];
@@ -137,10 +159,26 @@ const RecitePage = () => {
         continue;
       }
       
-      // Look ahead to detect skipped words (user jumped ahead) - search entire remaining surah
+      // Fuzzy match - check if similar enough (pronunciation tolerance)
+      const similarity = calculateSimilarity(userWord, refWord.normalized);
+      if (similarity >= SIMILARITY_THRESHOLD) {
+        statuses[refIndex] = { 
+          word: refWord.word, 
+          status: 'correct',
+          isLastWord: refWord.isLastWord,
+          ayahNumber: refWord.ayahIndex + 1,
+        };
+        refIndex++;
+        userIndex++;
+        continue;
+      }
+      
+      // Look ahead to detect skipped words (max 10 words ahead to prevent runaway)
+      const MAX_LOOKAHEAD = 10;
       let foundAhead = -1;
-      for (let lookAhead = refIndex + 1; lookAhead < allWordsFlat.length; lookAhead++) {
-        if (userWord === allWordsFlat[lookAhead].normalized) {
+      for (let lookAhead = refIndex + 1; lookAhead < Math.min(refIndex + MAX_LOOKAHEAD, allWordsFlat.length); lookAhead++) {
+        const aheadWord = allWordsFlat[lookAhead];
+        if (userWord === aheadWord.normalized || calculateSimilarity(userWord, aheadWord.normalized) >= SIMILARITY_THRESHOLD) {
           foundAhead = lookAhead;
           break;
         }
@@ -167,21 +205,14 @@ const RecitePage = () => {
         refIndex = foundAhead + 1;
         userIndex++;
       } else {
-        // No exact match found anywhere - tolerance for pronunciation variations
-        // Mark current reference word as correct and move on
-        statuses[refIndex] = {
-          word: refWord.word,
-          status: 'correct',
-          isLastWord: refWord.isLastWord,
-          ayahNumber: refWord.ayahIndex + 1,
-        };
-        refIndex++;
+        // No match found - skip this user word (might be noise/misrecognition)
+        // DON'T automatically mark reference word as correct
         userIndex++;
       }
     }
     
     return statuses;
-  }, [surah, transcript, interimTranscript, allWordsFlat]);
+  }, [surah, transcript, allWordsFlat, calculateSimilarity]);
 
   // Check how many words have been spoken
   const spokenWordsCount = useMemo(() => {
