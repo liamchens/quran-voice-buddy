@@ -174,9 +174,14 @@ const RecitePage = () => {
 
       const currentRef = wordStatuses[newCurrentIndex];
 
-      // TOLERAN: threshold rendah (40%) supaya pengucapan kurang jelas tetap dianggap benar
-      // Fokus ke bacaan dulu, bukan tajwid.
-      const CURRENT_MATCH_THRESHOLD = 40;
+      // TOLERAN (dalam ayat): fokus ke hafalan, bukan tajwid
+      // Tapi AWAL AYAT harus lebih ketat supaya ayat berikutnya tidak kebuka karena noise.
+      const isAyahStart =
+        newCurrentIndex === 0 || wordStatuses[newCurrentIndex - 1]?.isLastWord;
+
+      const baseThreshold = isAyahStart ? 60 : 40;
+      const shortWordBoost = (currentRef.normalized?.length || 0) <= 2 ? 20 : 0;
+      const CURRENT_MATCH_THRESHOLD = Math.min(85, baseThreshold + shortWordBoost);
 
       // KETAT untuk skip: hanya tandai "terlewat" kalau benar-benar yakin user lompat.
       // (1) Kata sekarang tidak match
@@ -415,13 +420,6 @@ const RecitePage = () => {
           <div className="text-center mb-6 pb-4 border-b border-border">
             <p className="font-arabic text-2xl md:text-3xl text-primary">{surah.name}</p>
           </div>
-
-          {/* Bismillah (except Al-Fatihah and At-Taubah) */}
-          {parseInt(surahNumber || '1') !== 1 && parseInt(surahNumber || '1') !== 9 && (
-            <p className="font-arabic text-xl text-center text-muted-foreground mb-6" dir="rtl">
-              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-            </p>
-          )}
 
           {/* All Words - Horizontal Mushaf Style */}
           <div dir="rtl">
