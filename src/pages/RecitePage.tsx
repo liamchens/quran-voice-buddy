@@ -103,7 +103,8 @@ const RecitePage = () => {
   // Word statuses - managed as state for Tarteel-style incremental matching
   const [wordStatuses, setWordStatuses] = useState<WordStatus[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const lastProcessedWordsRef = useRef<string>('');
+  const lastProcessedCountRef = useRef(0);
+
 
   const {
     isListening,
@@ -139,7 +140,7 @@ const RecitePage = () => {
     
     setWordStatuses(statuses);
     setCurrentWordIndex(0);
-    lastProcessedWordsRef.current = '';
+    lastProcessedCountRef.current = 0;
   }, [surah]);
 
   // Tarteel-style incremental matching - process one word at a time
@@ -151,43 +152,52 @@ const RecitePage = () => {
     const fullTranscript = transcript.trim();
     const normalizedFull = normalizeArabic(fullTranscript);
     const userWords = normalizedFull.split(' ').filter(w => w.length > 0);
-    
+
     // Only process NEW words that haven't been processed yet
-    const lastProcessedCount = lastProcessedWordsRef.current.split(' ').filter(w => w.length > 0).length;
-    
+    const lastProcessedCount = lastProcessedCountRef.current;
     if (userWords.length <= lastProcessedCount) return;
-    
-    // Get only the new words
+
     const newWords = userWords.slice(lastProcessedCount);
-    
+
     // Process each new word one by one
     let newCurrentIndex = currentWordIndex;
     const updatedStatuses = [...wordStatuses];
-    
-    for (const userWord of newWords) {
-      if (newCurrentIndex >= wordStatuses.length) break;
+    let processedInThisRun = 0;
+
+    for (let wIdx = 0; wIdx < newWords.length; wIdx++) {
+      const userWord = newWords[wIdx];
+
+      if (newCurrentIndex >= wordStatuses.length) {
+        processedInThisRun++;
+        continue;
+      }
 
       const currentRef = wordStatuses[newCurrentIndex];
 
       // TOLERAN: threshold rendah (40%) supaya pengucapan kurang jelas tetap dianggap benar
-      // Fokus ke bacaan dulu, bukan tajwid. Ayat muncul selama suara mirip.
+      // Fokus ke bacaan dulu, bukan tajwid.
       const CURRENT_MATCH_THRESHOLD = 40;
-      // KETAT untuk skip: threshold tinggi (80%) supaya hanya tandai "terlewat" jika benar-benar lompat
+
+      // KETAT untuk skip: hanya tandai "terlewat" kalau benar-benar yakin user lompat.
+      // (1) Kata sekarang tidak match
+      // (2) Ada kata jauh di depan yang match sangat tinggi
+      // (3) DAN dikonfirmasi oleh kata berikutnya (biar noise 1 kata tidak bikin "terlewat")
       const SKIP_DETECT_THRESHOLD = 80;
+      const SKIP_CONFIRM_THRESHOLD = 70;
 
       const currentSimilarity = calculateSimilarity(userWord, currentRef.normalized);
 
       if (currentSimilarity >= CURRENT_MATCH_THRESHOLD) {
-        // Suara cukup mirip dengan kata saat ini -> tampilkan sebagai benar
         updatedStatuses[newCurrentIndex] = {
           ...currentRef,
           status: 'correct',
         };
         newCurrentIndex++;
+        processedInThisRun++;
         continue;
       }
 
-      // Cek skip HANYA jika user BENAR-BENAR lompat ke kata lain dengan yakin
+      // Cek skip hanya di window kecil (hemat & stabil)
       const currentAyah = currentRef.ayahIndex;
       let foundAhead = -1;
 
@@ -208,39 +218,56 @@ const RecitePage = () => {
       }
 
       if (foundAhead !== -1) {
-        // User benar-benar lompat -> tandai kata yang dilewati sebagai incorrect
-        for (let i = newCurrentIndex; i < foundAhead; i++) {
-          const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
-          const isNextAyahFirstWord =
-            currentRef.isLastWord &&
-            i === newCurrentIndex + 1 &&
-            wordStatuses[i].ayahIndex === currentAyah + 1;
+        const nextUserWord = newWords[wIdx + 1];
+        const nextExpected = wordStatuses[foundAhead + 1]?.normalized;
 
-          if (!sameAyah && !isNextAyahFirstWord) break;
-
-          updatedStatuses[i] = {
-            ...wordStatuses[i],
-            status: 'incorrect',
-          };
+        // Kalau belum ada kata berikutnya, JANGAN putuskan "terlewat" dulu.
+        // Kita tunggu update transcript berikutnya biar tidak false-positive.
+        if (!nextUserWord) {
+          break;
         }
 
-        updatedStatuses[foundAhead] = {
-          ...wordStatuses[foundAhead],
-          status: 'correct',
-        };
-        newCurrentIndex = foundAhead + 1;
+        const nextSimilarity = nextExpected
+          ? calculateSimilarity(nextUserWord, nextExpected)
+          : 0;
+
+        if (nextExpected && nextSimilarity >= SKIP_CONFIRM_THRESHOLD) {
+          // User benar-benar lompat -> tandai kata yang dilewati sebagai incorrect
+          for (let i = newCurrentIndex; i < foundAhead; i++) {
+            const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
+            const isNextAyahFirstWord =
+              currentRef.isLastWord &&
+              i === newCurrentIndex + 1 &&
+              wordStatuses[i].ayahIndex === currentAyah + 1;
+
+            if (!sameAyah && !isNextAyahFirstWord) break;
+
+            updatedStatuses[i] = {
+              ...wordStatuses[i],
+              status: 'incorrect',
+            };
+          }
+
+          updatedStatuses[foundAhead] = {
+            ...wordStatuses[foundAhead],
+            status: 'correct',
+          };
+          newCurrentIndex = foundAhead + 1;
+        }
       }
 
-      // Kalau tidak match DAN tidak jelas skip -> abaikan (noise dari STT)
-      // Jangan advance, tunggu input yang lebih jelas
+      // Kalau tidak match DAN tidak terkonfirmasi skip -> anggap noise dari STT.
+      // Jangan advance; tapi kata user tetap dianggap "diproses" supaya tidak nyangkut.
+      processedInThisRun++;
     }
-    
+
     // Update state
     if (newCurrentIndex !== currentWordIndex) {
       setWordStatuses(updatedStatuses);
       setCurrentWordIndex(newCurrentIndex);
     }
-    lastProcessedWordsRef.current = fullTranscript;
+
+    lastProcessedCountRef.current = lastProcessedCount + processedInThisRun;
     
   }, [transcript, isListening, wordStatuses, currentWordIndex]);
 
@@ -305,7 +332,7 @@ const RecitePage = () => {
     
     setWordStatuses(statuses);
     setCurrentWordIndex(0);
-    lastProcessedWordsRef.current = '';
+    lastProcessedCountRef.current = 0;
   }, [surah]);
 
   // Handle voice toggle
