@@ -56,6 +56,31 @@ const getRandomAppreciation = (isComplete: boolean, hasSkipped: boolean) => {
   return list[Math.floor(Math.random() * list.length)];
 };
 
+// Calculate similarity between two strings (moved outside component)
+const calculateSimilarity = (str1: string, str2: string): number => {
+  if (str1 === str2) return 1;
+  if (!str1.length || !str2.length) return 0;
+  
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  
+  // Quick check: if lengths differ too much, low similarity
+  if (longer.length - shorter.length > 3) return 0.3;
+  
+  // Check if one contains the other
+  if (longer.includes(shorter) || shorter.includes(longer)) {
+    return shorter.length / longer.length;
+  }
+  
+  // Count matching characters
+  let matches = 0;
+  for (let i = 0; i < shorter.length; i++) {
+    if (longer.includes(shorter[i])) matches++;
+  }
+  
+  return matches / longer.length;
+};
+
 const RecitePage = () => {
   const { surahNumber } = useParams<{ surahNumber: string }>();
   const [surah, setSurah] = useState<SurahDetail | null>(null);
@@ -185,32 +210,6 @@ const RecitePage = () => {
     
     return statuses;
   }, [surah, transcript, interimTranscript, allWordsFlat]);
-
-  // Calculate similarity between two strings (Levenshtein-based)
-  const calculateSimilarity = (str1: string, str2: string): number => {
-    if (str1 === str2) return 1;
-    if (!str1.length || !str2.length) return 0;
-    
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
-    
-    // Quick check: if lengths differ too much, low similarity
-    if (longer.length - shorter.length > 3) return 0.3;
-    
-    // Check if one contains the other
-    if (longer.includes(shorter) || shorter.includes(longer)) {
-      return shorter.length / longer.length;
-    }
-    
-    // Count matching characters
-    let matches = 0;
-    for (let i = 0; i < shorter.length; i++) {
-      if (longer.includes(shorter[i])) matches++;
-    }
-    
-    return matches / longer.length;
-  };
-
   // Check how many words have been spoken
   const spokenWordsCount = useMemo(() => {
     return wordStatuses.filter(w => w.status !== 'pending').length;
