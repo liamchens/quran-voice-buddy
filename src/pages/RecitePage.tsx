@@ -247,13 +247,15 @@ const RecitePage = () => {
     return wordStatuses.length > 0 && currentWordIndex >= wordStatuses.length;
   }, [wordStatuses.length, currentWordIndex]);
 
-  // Jangan auto-stop voice (biarkan user stop manual)
-  // Catatan: Web Speech API kadang berhenti sendiri saat hening; itu bukan dari auto-stop ini.
-  // useEffect(() => {
-  //   if (allComplete && isListening) {
-  //     stopListening();
-  //   }
-  // }, [allComplete, isListening, stopListening]);
+  // Auto-stop HANYA jika sudah sampai ayat terakhir (selesai surah)
+  // Catatan: di Chrome mobile, SpeechRecognition juga bisa berhenti sendiri saat hening;
+  // itu ditangani di hook dengan auto-restart.
+  useEffect(() => {
+    if (allComplete && isListening) {
+      setUserStopped(true);
+      stopListening();
+    }
+  }, [allComplete, isListening, stopListening]);
 
   // Load surah data
   useEffect(() => {
