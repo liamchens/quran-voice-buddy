@@ -96,7 +96,10 @@ const RecitePage = () => {
   const [surah, setSurah] = useState<SurahDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
+  // Hasil validasi & apresiasi hanya tampil setelah user menekan STOP
+  const [userStopped, setUserStopped] = useState(false);
+
   // Word statuses - managed as state for Tarteel-style incremental matching
   const [wordStatuses, setWordStatuses] = useState<WordStatus[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
@@ -299,8 +302,12 @@ const RecitePage = () => {
   // Handle voice toggle
   const handleVoiceToggle = useCallback(() => {
     if (isListening) {
+      // User explicitly stops -> show results
+      setUserStopped(true);
       stopListening();
     } else {
+      // User explicitly starts -> hide results until stop
+      setUserStopped(false);
       resetTranscript();
       resetWordStatuses();
       startListening();
@@ -309,6 +316,7 @@ const RecitePage = () => {
 
   // Retry - reset transcript and word statuses
   const handleRetry = useCallback(() => {
+    setUserStopped(false);
     resetTranscript();
     resetWordStatuses();
   }, [resetTranscript, resetWordStatuses]);
@@ -453,7 +461,7 @@ const RecitePage = () => {
         )}
 
         {/* Completion/Appreciation Message */}
-        {!isListening && spokenWordsCount > 0 && (() => {
+        {userStopped && spokenWordsCount > 0 && (() => {
           const hasIncorrect = wordStatuses.some(w => w.status === 'incorrect');
           const appreciation = getRandomAppreciation(allComplete, hasIncorrect);
           const progressPercent = Math.round((spokenWordsCount / wordStatuses.length) * 100);
