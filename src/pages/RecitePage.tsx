@@ -178,19 +178,32 @@ const RecitePage = () => {
         };
         newCurrentIndex++;
       } else {
-        // Check if user skipped ahead (look ahead max 5 words)
+        // Check if user skipped ahead (look ahead max 5 words) - ONLY within the same ayah
+        const currentAyah = currentRef.ayahIndex;
         let foundAhead = -1;
+
         for (let i = newCurrentIndex + 1; i < Math.min(newCurrentIndex + 6, wordStatuses.length); i++) {
+          const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
+          const isNextAyahFirstWord =
+            currentRef.isLastWord &&
+            i === newCurrentIndex + 1 &&
+            wordStatuses[i].ayahIndex === currentAyah + 1;
+
+          // Stop searching when ayah changes (prevents jumping across verses),
+          // except allow moving to the FIRST word of the next ayah when we're at the last word.
+          if (!sameAyah && !isNextAyahFirstWord) break;
+
           const aheadSimilarity = calculateSimilarity(userWord, wordStatuses[i].normalized);
           if (aheadSimilarity >= SIMILARITY_THRESHOLD) {
             foundAhead = i;
             break;
           }
         }
-        
+
         if (foundAhead !== -1) {
-          // User skipped some words - mark skipped as incorrect
+          // User skipped some words - mark skipped as incorrect (within the same ayah)
           for (let i = newCurrentIndex; i < foundAhead; i++) {
+            if (wordStatuses[i].ayahIndex !== currentAyah) break;
             updatedStatuses[i] = {
               ...wordStatuses[i],
               status: 'incorrect',
@@ -221,10 +234,10 @@ const RecitePage = () => {
     return wordStatuses.filter(w => w.status !== 'pending').length;
   }, [wordStatuses]);
 
-  // Check if all words are complete
+  // Check if all words are complete (only when we reached the final word)
   const allComplete = useMemo(() => {
-    return wordStatuses.length > 0 && wordStatuses.every(s => s.status !== 'pending');
-  }, [wordStatuses]);
+    return wordStatuses.length > 0 && currentWordIndex >= wordStatuses.length;
+  }, [wordStatuses.length, currentWordIndex]);
 
   // Auto-stop when complete
   useEffect(() => {
