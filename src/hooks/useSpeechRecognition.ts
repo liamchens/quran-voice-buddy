@@ -30,6 +30,9 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [isSupported, setIsSupported] = useState(false);
   
   const recognitionRef = useRef<any>(null);
+  const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const shouldRestartRef = useRef(false);
+  const lastUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     // Check for browser support
@@ -42,31 +45,83 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'ar-SA'; // Arabic (Saudi Arabia)
+      recognition.maxAlternatives = 1;
       
       recognition.onstart = () => {
         setIsListening(true);
         setError(null);
+        shouldRestartRef.current = true;
       };
       
       recognition.onend = () => {
-        setIsListening(false);
+        // Auto-restart if should still be listening (prevents page disappearing issue)
+        if (shouldRestartRef.current) {
+          restartTimeoutRef.current = setTimeout(() => {
+            try {
+              recognition.start();
+            } catch (e) {
+              // Ignore restart errors
+              setIsListening(false);
+            }
+          }, 300);
+        } else {
+          setIsListening(false);
+        }
       };
       
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        // Handle specific errors gracefully
+        const errorType = event.error;
+        
+        // These errors are recoverable - just restart
+        if (errorType === 'no-speech' || errorType === 'aborted' || errorType === 'network') {
+          if (shouldRestartRef.current) {
+            restartTimeoutRef.current = setTimeout(() => {
+              try {
+                recognition.start();
+              } catch (e) {
+                // Ignore
+              }
+            }, 500);
+          }
+          return;
+        }
+        
+        // Not-allowed means user denied permission
+        if (errorType === 'not-allowed') {
+          setError('Izin mikrofon ditolak. Silakan izinkan akses mikrofon.');
+          shouldRestartRef.current = false;
+          setIsListening(false);
+          return;
+        }
+        
+        // Other errors - show but don't crash
         setError(`Error: ${event.error}`);
-        setIsListening(false);
       };
       
       recognition.onresult = (event: SpeechRecognitionEvent) => {
+        const now = Date.now();
+        
+        // Throttle updates on mobile (min 150ms between updates)
+        if (now - lastUpdateRef.current < 150) {
+          return;
+        }
+        lastUpdateRef.current = now;
+        
         let finalTranscript = '';
         let interim = '';
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          if (result.isFinal) {
-            finalTranscript += result[0].transcript;
-          } else {
-            interim += result[0].transcript;
+          const confidence = result[0].confidence;
+          
+          // Only accept results with reasonable confidence (>0.3)
+          if (confidence === undefined || confidence > 0.3) {
+            if (result.isFinal) {
+              finalTranscript += result[0].transcript;
+            } else {
+              interim += result[0].transcript;
+            }
           }
         }
         
@@ -83,14 +138,23 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
     }
     
     return () => {
+      shouldRestartRef.current = false;
+      if (restartTimeoutRef.current) {
+        clearTimeout(restartTimeoutRef.current);
+      }
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // Ignore
+        }
       }
     };
   }, []);
 
   const startListening = useCallback(() => {
     if (recognitionRef.current && !isListening) {
+      shouldRestartRef.current = true;
       try {
         recognitionRef.current.start();
       } catch (e) {
@@ -100,10 +164,19 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   }, [isListening]);
 
   const stopListening = useCallback(() => {
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop();
+    shouldRestartRef.current = false;
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current);
     }
-  }, [isListening]);
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        // Ignore
+      }
+    }
+    setIsListening(false);
+  }, []);
 
   const resetTranscript = useCallback(() => {
     setTranscript('');
