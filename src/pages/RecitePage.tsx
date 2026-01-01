@@ -166,76 +166,68 @@ const RecitePage = () => {
     
     for (const userWord of newWords) {
       if (newCurrentIndex >= wordStatuses.length) break;
-      
+
       const currentRef = wordStatuses[newCurrentIndex];
 
-      // Fuzzy matching dengan threshold toleran (50%) untuk variasi pengucapan
-      // Hanya tandai "terlewat" jika user benar-benar loncat ke kata lain
-      const SIMILARITY_THRESHOLD = 50;
-      const similarity = calculateSimilarity(userWord, currentRef.normalized);
-      
-      if (similarity >= SIMILARITY_THRESHOLD) {
-        // Word matches (cukup mirip) - mark as correct
+      // Toleran untuk pengucapan, tapi jangan sampai "ngegas" (advance tanpa yakin)
+      const CURRENT_MATCH_THRESHOLD = 55;
+      const SKIP_DETECT_THRESHOLD = 75;
+      const currentSimilarity = calculateSimilarity(userWord, currentRef.normalized);
+
+      if (currentSimilarity >= CURRENT_MATCH_THRESHOLD) {
         updatedStatuses[newCurrentIndex] = {
           ...currentRef,
           status: 'correct',
         };
         newCurrentIndex++;
-      } else {
-        // Cek apakah user melompat ke kata lain (benar-benar skip/lupa)
-        const currentAyah = currentRef.ayahIndex;
-        let foundAhead = -1;
+        continue;
+      }
 
-        // Lookahead max 5 kata
-        for (let i = newCurrentIndex + 1; i < Math.min(newCurrentIndex + 6, wordStatuses.length); i++) {
+      // Cek skip HANYA jika benar-benar jelas user lompat ke kata lain
+      const currentAyah = currentRef.ayahIndex;
+      let foundAhead = -1;
+
+      for (let i = newCurrentIndex + 1; i < Math.min(newCurrentIndex + 6, wordStatuses.length); i++) {
+        const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
+        const isNextAyahFirstWord =
+          currentRef.isLastWord &&
+          i === newCurrentIndex + 1 &&
+          wordStatuses[i].ayahIndex === currentAyah + 1;
+
+        if (!sameAyah && !isNextAyahFirstWord) break;
+
+        const aheadSimilarity = calculateSimilarity(userWord, wordStatuses[i].normalized);
+        if (aheadSimilarity >= SKIP_DETECT_THRESHOLD) {
+          foundAhead = i;
+          break;
+        }
+      }
+
+      if (foundAhead !== -1) {
+        for (let i = newCurrentIndex; i < foundAhead; i++) {
           const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
           const isNextAyahFirstWord =
             currentRef.isLastWord &&
             i === newCurrentIndex + 1 &&
             wordStatuses[i].ayahIndex === currentAyah + 1;
 
-          // Stop searching when ayah changes, kecuali boleh pindah ke kata PERTAMA ayat berikutnya
           if (!sameAyah && !isNextAyahFirstWord) break;
 
-          const aheadSimilarity = calculateSimilarity(userWord, wordStatuses[i].normalized);
-          if (aheadSimilarity >= SIMILARITY_THRESHOLD) {
-            foundAhead = i;
-            break;
-          }
+          updatedStatuses[i] = {
+            ...wordStatuses[i],
+            status: 'incorrect',
+          };
         }
 
-        if (foundAhead !== -1) {
-          // User benar-benar loncat - mark kata yang dilewati sebagai incorrect
-          for (let i = newCurrentIndex; i < foundAhead; i++) {
-            const sameAyah = wordStatuses[i].ayahIndex === currentAyah;
-            const isNextAyahFirstWord =
-              currentRef.isLastWord &&
-              i === newCurrentIndex + 1 &&
-              wordStatuses[i].ayahIndex === currentAyah + 1;
-
-            if (!sameAyah && !isNextAyahFirstWord) break;
-
-            updatedStatuses[i] = {
-              ...wordStatuses[i],
-              status: 'incorrect',
-            };
-          }
-          // Mark kata yang ditemukan sebagai correct
-          updatedStatuses[foundAhead] = {
-            ...wordStatuses[foundAhead],
-            status: 'correct',
-          };
-          newCurrentIndex = foundAhead + 1;
-        } else {
-          // Tidak ada match di depan - anggap ini pengucapan yang kurang jelas tapi benar
-          // Langsung mark current word sebagai correct dan lanjut
-          updatedStatuses[newCurrentIndex] = {
-            ...currentRef,
-            status: 'correct',
-          };
-          newCurrentIndex++;
-        }
+        updatedStatuses[foundAhead] = {
+          ...wordStatuses[foundAhead],
+          status: 'correct',
+        };
+        newCurrentIndex = foundAhead + 1;
       }
+
+      // Kalau tidak match & tidak jelas skip, anggap noise / hasil STT kurang tepat:
+      // JANGAN advance supaya ayat tidak keluar terlalu cepat.
     }
     
     // Update state
