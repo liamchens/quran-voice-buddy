@@ -302,6 +302,69 @@ const RecitePage = () => {
             status: 'correct',
           };
           newCurrentIndex = foundAhead + 1;
+          processedInThisRun++;
+          continue;
+        }
+      }
+
+      // Fallback: kalau user benar-benar lompat beberapa ayat ke depan (misal dari ayat 6 ke ayat 7/9),
+      // kita cari "awal ayat" berikutnya yang match sangat tinggi dan dikonfirmasi 2 kata.
+      // Tujuannya: ayat yang dibaca user tetap muncul (tidak dianggap noise).
+      if (foundAhead === -1 && isAyahStart) {
+        const nextUserWord = newWords[wIdx + 1];
+        if (!nextUserWord) {
+          // butuh 2 kata untuk konfirmasi
+          break;
+        }
+
+        const LONG_JUMP_MAX_AYAHS_AHEAD = 12;
+        const LONG_JUMP_DETECT_THRESHOLD = 95;
+        const LONG_JUMP_CONFIRM_THRESHOLD = 60;
+
+        let bestIdx = -1;
+        let bestSim = 0;
+
+        for (let i = newCurrentIndex + 1; i < wordStatuses.length; i++) {
+          const ayahIdx = wordStatuses[i].ayahIndex;
+          if (ayahIdx <= currentAyah + 1) continue; // biarkan next-ayah ditangani oleh logic biasa
+          if (ayahIdx > currentAyah + LONG_JUMP_MAX_AYAHS_AHEAD) break;
+
+          const isStart = i === 0 || wordStatuses[i - 1]?.isLastWord;
+          if (!isStart) continue;
+
+          const cand = wordStatuses[i];
+          if ((cand.normalized?.length || 0) < 4) continue;
+
+          const sim = calculateSimilarity(userWord, cand.normalized);
+          if (sim > bestSim) {
+            bestSim = sim;
+            bestIdx = i;
+          }
+        }
+
+        if (bestIdx !== -1 && bestSim >= LONG_JUMP_DETECT_THRESHOLD) {
+          const nextExpected = wordStatuses[bestIdx + 1]?.normalized;
+          const nextSim = nextExpected
+            ? calculateSimilarity(nextUserWord, nextExpected)
+            : 0;
+
+          if (!nextExpected || nextSim >= LONG_JUMP_CONFIRM_THRESHOLD) {
+            for (let i = newCurrentIndex; i < bestIdx; i++) {
+              updatedStatuses[i] = {
+                ...wordStatuses[i],
+                status: 'incorrect',
+              };
+            }
+
+            updatedStatuses[bestIdx] = {
+              ...wordStatuses[bestIdx],
+              status: 'correct',
+            };
+
+            newCurrentIndex = bestIdx + 1;
+            processedInThisRun++;
+            continue;
+          }
         }
       }
 
